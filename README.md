@@ -54,6 +54,7 @@ No primeiro login bem-sucedido, a senha passa a ser armazenada com hash.
   - Fundo de aba: ate `3 MB`
 
 ## Documentacao de fluxo
+- Status completo desta fase: `docs/STATUS_E_BACKLOG_2026-02-11.md`
 - Status rapido (raiz): `STATUS.md`
 - Handoff mais recente: `docs/HANDOFF_2026-02-11.md`
 - Status atual: `docs/STATUS_ATUAL.md`
