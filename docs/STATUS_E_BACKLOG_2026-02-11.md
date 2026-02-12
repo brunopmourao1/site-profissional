@@ -86,6 +86,8 @@ Estado atual dos dados (snapshot rapido):
     - `compact` (cards juntos, mesma largura)
 - Novo ajuste recente:
   - novos cards no dashboard aparecem em blocos separados (`Novo card #1`, `#2`, ...), melhorando usabilidade.
+- Novo ajuste recente:
+  - cada bloco de card no dashboard tem cabecalho com botao de `Minimizar/Expandir` (por card), facilitando organizar muitos cards.
 
 ### 3.6 Tipografia e formatacao
 - Selecao de fonte e tamanho para diversos textos.
@@ -130,9 +132,8 @@ Estado atual dos dados (snapshot rapido):
 ## 5. O que ainda falta (backlog)
 
 ### Prioridade alta
-1. Adicionar botao de minimizar/expandir por card no dashboard.
-2. Rodar QA manual completo em todas as funcoes de secao (1 a 9).
-3. Validar comportamento em mobile para todos os modos de midia e cards.
+1. Rodar QA manual completo em todas as funcoes de secao (1 a 9).
+2. Validar comportamento em mobile para todos os modos de midia e cards.
 
 ### Prioridade media
 1. Revisar visual fino de espacamentos e hierarquia tipografica.
@@ -151,12 +152,11 @@ Estado atual dos dados (snapshot rapido):
 - Sempre validar permissao de escrita em `data/` e `uploads/` no servidor.
 
 ## 7. Plano de conclusao recomendado
-1. Fechar item de minimizar/expandir por card.
-2. Rodar checklist completo de QA funcional.
-3. Congelar layout e revisar responsividade.
-4. Fazer commit final de release.
-5. Publicar em hospedagem de homologacao.
-6. Validar novamente em ambiente real.
+1. Rodar checklist completo de QA funcional.
+2. Congelar layout e revisar responsividade.
+3. Fazer commit final de release.
+4. Publicar em hospedagem de homologacao.
+5. Validar novamente em ambiente real.
 
 ## 8. Comandos de retomada rapida
 ```powershell
@@ -170,4 +170,3 @@ git add .
 git commit -m "docs: status completo e backlog atualizado"
 git push origin main
 ```
-

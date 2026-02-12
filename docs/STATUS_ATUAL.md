@@ -11,4 +11,4 @@ Resumo rapido:
 - Projeto funcional com dashboard e secoes dinamicas.
 - Hero com funcoes de texto/video/imagem.
 - Cards com limite maximo de 8, layout 4x2 e espacamento configuravel.
-- Proximo item prioritario: minimizar/expandir por card no dashboard.
+- Cards no dashboard agora possuem minimizar/expandir por card (para organizar muitos cards).

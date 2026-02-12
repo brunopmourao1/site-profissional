@@ -1,9 +1,9 @@
 {
     "meta": {
         "site_name": "Creative Box",
-        "logo_image": "",
-        "logo_alt": "Logo da empresa",
-        "headline": "CREATIVE BOX DO MEU AMOR",
+        "logo_image": "uploads\/logo-1770900403.svg",
+        "logo_alt": "",
+        "headline": "CREATIVE BOX",
         "intro": "Teste do Texto Creative Box",
         "brand_font": "sora",
         "brand_size": 18,
@@ -22,10 +22,10 @@
         "address": "Rua Exemplo, 123 - Cidade\/UF",
         "whatsapp": "+5511956947827",
         "hero_video": "uploads\/hero-1770760581.mp4",
-        "hero_mode": "image_split",
+        "hero_mode": "text",
         "hero_layout": "split-left",
         "hero_split_size": "large",
-        "hero_split_fit": "cover",
+        "hero_split_fit": "contain",
         "hero_text_color": "#ffffff",
         "social_facebook_enabled": false,
         "social_facebook_url": "",
@@ -37,7 +37,11 @@
         "social_behance_url": "",
         "social_youtube_enabled": false,
         "social_youtube_url": "",
-        "hero_image": "uploads\/hero-image-1770776758.png"
+        "hero_image": "uploads\/hero-image-1770776758.png",
+        "hero_split_width": 1000,
+        "hero_split_height": 1000,
+        "hero_overline": "Apresentacao profissional",
+        "brand_display": "logo"
     },
     "admin": {
         "username": "admin",
@@ -51,7 +55,7 @@
             "slug": "quem-somos",
             "content": "Texto da ABA",
             "background_color": "#f6eff3",
-            "background_image": "",
+            "background_image": "uploads\/secao-1-1770839732.jpg",
             "menu_label": "Quem Somos",
             "order": 1,
             "text_font": "manrope",
@@ -59,11 +63,11 @@
             "title_font": "sora",
             "title_size": 40,
             "layout_mode": "background",
-            "split_image": "",
-            "split_size": "medium",
+            "split_image": "uploads\/split-1-1770839634.jpg",
+            "split_size": "large",
             "split_fit": "cover",
             "section_animation": "left",
-            "section_video": "",
+            "section_video": "uploads\/secao-video-1-1770839667.mp4",
             "section_mode": "text",
             "text_color": "#000000",
             "youtube_enabled": false,
@@ -79,14 +83,73 @@
             "contact_button_text": "Enviar",
             "linked_images": [],
             "linked_images_limit": 6,
-            "section_feature": "none",
+            "section_feature": "cards",
             "linked_images_layout": "boxed",
-            "cards_title": "",
-            "cards_items": [],
-            "section_function": "basic_text",
-            "split_media_type": "image",
-            "background_media_type": "image",
-            "cards_style": "media"
+            "cards_title": "TESTE 1",
+            "cards_items": [
+                {
+                    "id": 1,
+                    "title": "",
+                    "text": "asdfghjjgfdsa",
+                    "image": "uploads\/card-1-1-1770899814.jpg",
+                    "button_text": "Confira",
+                    "button_link": "https:\/\/www.mercadolivre.com.br\/",
+                    "order": 1
+                },
+                {
+                    "id": 2,
+                    "title": "Card 2",
+                    "text": "asdfghjjgfdsa",
+                    "image": "",
+                    "button_text": "",
+                    "button_link": "",
+                    "order": 2
+                },
+                {
+                    "id": 3,
+                    "title": "3",
+                    "text": "3",
+                    "image": "",
+                    "button_text": "",
+                    "button_link": "",
+                    "order": 3
+                },
+                {
+                    "id": 4,
+                    "title": "4",
+                    "text": "4",
+                    "image": "",
+                    "button_text": "",
+                    "button_link": "",
+                    "order": 4
+                },
+                {
+                    "id": 5,
+                    "title": "5",
+                    "text": "5",
+                    "image": "",
+                    "button_text": "",
+                    "button_link": "",
+                    "order": 5
+                },
+                {
+                    "id": 6,
+                    "title": "6",
+                    "text": "6",
+                    "image": "",
+                    "button_text": "",
+                    "button_link": "",
+                    "order": 6
+                }
+            ],
+            "section_function": "cards_media",
+            "split_media_type": "video",
+            "background_media_type": "video",
+            "cards_style": "media",
+            "split_width": 0,
+            "split_height": 0,
+            "cards_spacing": "spaced",
+            "cards_limit": 6
         }
     ]
 }

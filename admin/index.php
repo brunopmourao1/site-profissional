@@ -110,6 +110,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($action === 'update_meta') {
         $data['meta']['site_name'] = sanitize_text((string)($_POST['site_name'] ?? ''));
+        $data['meta']['brand_display'] = normalize_brand_display($_POST['brand_display'] ?? 'both');
+        $data['meta']['hero_overline'] = sanitize_text((string)($_POST['hero_overline'] ?? 'Apresentacao profissional'));
         $data['meta']['headline'] = sanitize_text((string)($_POST['headline'] ?? ''));
         $data['meta']['hero_text_color'] = sanitize_text((string)($_POST['hero_text_color'] ?? '#f6f2eb'));
         $data['meta']['intro'] = sanitize_text((string)($_POST['intro'] ?? ''));
@@ -412,6 +414,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'linked_images_layout' => $linkedImagesLayout,
             'cards_title' => sanitize_text((string)($_POST['cards_title'] ?? '')),
             'cards_style' => $cardsStyle,
+            'cards_spacing' => normalize_cards_spacing($_POST['cards_spacing'] ?? 'spaced'),
+            'cards_limit' => normalize_cards_limit($_POST['cards_limit'] ?? 6),
             'cards_items' => [],
             'background_color' => sanitize_text((string)($_POST['background_color'] ?? '#ffffff')),
             'background_image' => '',
@@ -499,6 +503,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $data['sections'][$index]['linked_images_layout'] = $linkedImagesLayout;
             $data['sections'][$index]['cards_title'] = sanitize_text((string)($_POST['cards_title'] ?? ''));
             $data['sections'][$index]['cards_style'] = $cardsStyle;
+            $data['sections'][$index]['cards_spacing'] = normalize_cards_spacing($_POST['cards_spacing'] ?? 'spaced');
+            $data['sections'][$index]['cards_limit'] = normalize_cards_limit($_POST['cards_limit'] ?? 6);
             if ($data['sections'][$index]['contact_form_title'] === '') {
                 $data['sections'][$index]['contact_form_title'] = 'Envie sua mensagem';
             }
@@ -779,61 +785,80 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $updatedLinkedImages[] = $linkedItem;
             }
 
-            $newLinkedLink = sanitize_text((string)($_POST['linked_image_new_link'] ?? ''));
-            $newLinkedAlt = sanitize_text((string)($_POST['linked_image_new_alt'] ?? ''));
-            $newLinkedHasText = $newLinkedLink !== '' || $newLinkedAlt !== '';
-            $newLinkedFile = $_FILES['linked_image_new_file'] ?? null;
-            if ($error === '' && is_array($newLinkedFile)) {
-                $newLinkedUploadError = (int)($newLinkedFile['error'] ?? UPLOAD_ERR_NO_FILE);
+            $linkedImagesLimit = normalize_linked_images_limit($data['sections'][$index]['linked_images_limit'] ?? 6);
+            $newLinkedLinks = isset($_POST['linked_image_new_links']) && is_array($_POST['linked_image_new_links']) ? $_POST['linked_image_new_links'] : [];
+            $newLinkedAlts = isset($_POST['linked_image_new_alts']) && is_array($_POST['linked_image_new_alts']) ? $_POST['linked_image_new_alts'] : [];
+            $newLinkedFiles = isset($_FILES['linked_image_new_files']) && is_array($_FILES['linked_image_new_files']) ? $_FILES['linked_image_new_files'] : null;
+            $newLinkedFilesCount = is_array($newLinkedFiles) && isset($newLinkedFiles['name']) && is_array($newLinkedFiles['name']) ? count($newLinkedFiles['name']) : 0;
+            $newLinkedRowsCount = max(count($newLinkedLinks), count($newLinkedAlts), $newLinkedFilesCount);
+
+            for ($newLinkedIndex = 0; $error === '' && $newLinkedIndex < $newLinkedRowsCount; $newLinkedIndex++) {
+                $newLinkedLink = sanitize_text((string)($newLinkedLinks[$newLinkedIndex] ?? ''));
+                $newLinkedAlt = sanitize_text((string)($newLinkedAlts[$newLinkedIndex] ?? ''));
+                $newLinkedHasText = $newLinkedLink !== '' || $newLinkedAlt !== '';
+                $newLinkedUploadError = UPLOAD_ERR_NO_FILE;
+                if (is_array($newLinkedFiles) && isset($newLinkedFiles['error']) && is_array($newLinkedFiles['error'])) {
+                    $newLinkedUploadError = (int)($newLinkedFiles['error'][$newLinkedIndex] ?? UPLOAD_ERR_NO_FILE);
+                }
+                $newLinkedHasFile = $newLinkedUploadError === UPLOAD_ERR_OK;
+                $newLinkedHasAnyInput = $newLinkedHasText || $newLinkedHasFile;
+                if (!$newLinkedHasAnyInput) {
+                    continue;
+                }
+
+                if (count($updatedLinkedImages) >= $linkedImagesLimit) {
+                    $error = 'Limite de imagens desta aba atingido (' . $linkedImagesLimit . '). Aumente o limite ou remova uma imagem antes de adicionar outra.';
+                    break;
+                }
+
                 if ($newLinkedUploadError !== UPLOAD_ERR_OK && $newLinkedUploadError !== UPLOAD_ERR_NO_FILE) {
                     $error = upload_error_message($newLinkedUploadError);
+                    break;
                 }
 
-                if ($error === '' && $newLinkedUploadError === UPLOAD_ERR_OK) {
-                    $linkedImagesLimit = normalize_linked_images_limit($data['sections'][$index]['linked_images_limit'] ?? 6);
-                    if (count($updatedLinkedImages) >= $linkedImagesLimit) {
-                        $error = 'Limite de imagens desta aba atingido (' . $linkedImagesLimit . '). Aumente o limite ou remova uma imagem antes de adicionar outra.';
+                if ($newLinkedUploadError === UPLOAD_ERR_NO_FILE) {
+                    if ($newLinkedHasText) {
+                        $error = 'Para adicionar uma nova imagem com link, envie o arquivo da imagem.';
                     }
+                    continue;
                 }
 
-                if ($error === '' && $newLinkedUploadError === UPLOAD_ERR_OK) {
-                    $tmpName = (string)$newLinkedFile['tmp_name'];
-                    $original = (string)$newLinkedFile['name'];
-                    $ext = strtolower(pathinfo($original, PATHINFO_EXTENSION));
-                    $allowed = ['jpg', 'jpeg', 'png', 'webp'];
-                    $allowedMime = ['image/jpeg', 'image/png', 'image/webp'];
-                    if (in_array($ext, $allowed, true)) {
-                        $mime = detect_uploaded_mime_type($tmpName);
-                        if ($mime !== '' && !in_array($mime, $allowedMime, true)) {
-                            $error = 'Nova imagem da galeria invalida. Envie JPG, PNG ou WEBP.';
-                        } elseif (!is_uploaded_file($tmpName)) {
-                            $error = 'Arquivo da nova imagem da galeria invalido.';
-                        } elseif (!is_writable(UPLOADS_DIR)) {
-                            $error = 'A pasta uploads/ nao tem permissao de escrita.';
-                        } else {
-                            $maxLinkedImageId++;
-                            $filename = 'linked-' . $id . '-' . $maxLinkedImageId . '-' . time() . '.' . $ext;
-                            $destination = UPLOADS_DIR . DIRECTORY_SEPARATOR . $filename;
-                            if (move_uploaded_file($tmpName, $destination)) {
-                                $updatedLinkedImages[] = [
-                                    'id' => $maxLinkedImageId,
-                                    'image' => UPLOADS_URL . '/' . $filename,
-                                    'link' => $newLinkedLink,
-                                    'alt' => $newLinkedAlt,
-                                    'order' => count($updatedLinkedImages) + 1,
-                                ];
-                            } else {
-                                $error = 'Falha ao salvar nova imagem da galeria em uploads/.';
-                            }
-                        }
+                $tmpName = is_array($newLinkedFiles) && isset($newLinkedFiles['tmp_name']) && is_array($newLinkedFiles['tmp_name'])
+                    ? (string)($newLinkedFiles['tmp_name'][$newLinkedIndex] ?? '')
+                    : '';
+                $original = is_array($newLinkedFiles) && isset($newLinkedFiles['name']) && is_array($newLinkedFiles['name'])
+                    ? (string)($newLinkedFiles['name'][$newLinkedIndex] ?? '')
+                    : '';
+                $ext = strtolower(pathinfo($original, PATHINFO_EXTENSION));
+                $allowed = ['jpg', 'jpeg', 'png', 'webp'];
+                $allowedMime = ['image/jpeg', 'image/png', 'image/webp'];
+                if (in_array($ext, $allowed, true)) {
+                    $mime = detect_uploaded_mime_type($tmpName);
+                    if ($mime !== '' && !in_array($mime, $allowedMime, true)) {
+                        $error = 'Nova imagem da galeria invalida. Envie JPG, PNG ou WEBP.';
+                    } elseif (!is_uploaded_file($tmpName)) {
+                        $error = 'Arquivo da nova imagem da galeria invalido.';
+                    } elseif (!is_writable(UPLOADS_DIR)) {
+                        $error = 'A pasta uploads/ nao tem permissao de escrita.';
                     } else {
-                        $error = 'Formato invalido para nova imagem da galeria. Use JPG, PNG ou WEBP.';
+                        $maxLinkedImageId++;
+                        $filename = 'linked-' . $id . '-' . $maxLinkedImageId . '-' . time() . '-' . $newLinkedIndex . '.' . $ext;
+                        $destination = UPLOADS_DIR . DIRECTORY_SEPARATOR . $filename;
+                        if (move_uploaded_file($tmpName, $destination)) {
+                            $updatedLinkedImages[] = [
+                                'id' => $maxLinkedImageId,
+                                'image' => UPLOADS_URL . '/' . $filename,
+                                'link' => $newLinkedLink,
+                                'alt' => $newLinkedAlt,
+                                'order' => count($updatedLinkedImages) + 1,
+                            ];
+                        } else {
+                            $error = 'Falha ao salvar nova imagem da galeria em uploads/.';
+                        }
                     }
-                } elseif ($error === '' && $newLinkedHasText) {
-                    $error = 'Para adicionar uma nova imagem com link, envie o arquivo da imagem.';
+                } else {
+                    $error = 'Formato invalido para nova imagem da galeria. Use JPG, PNG ou WEBP.';
                 }
-            } elseif ($error === '' && $newLinkedHasText) {
-                $error = 'Para adicionar uma nova imagem com link, envie o arquivo da imagem.';
             }
 
             foreach ($updatedLinkedImages as $updatedIndex => &$linkedImageItem) {
@@ -869,6 +894,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $maxCardId = $cardId;
                 }
             }
+            $cardsLimit = normalize_cards_limit($data['sections'][$index]['cards_limit'] ?? 6);
 
             $postedCardIds = isset($_POST['card_ids']) && is_array($_POST['card_ids']) ? $_POST['card_ids'] : [];
             $postedCardTitles = isset($_POST['card_titles']) && is_array($_POST['card_titles']) ? $_POST['card_titles'] : [];
@@ -968,86 +994,109 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     continue;
                 }
                 $updatedCards[] = $cardItem;
-                if (count($updatedCards) >= 6) {
+                if (count($updatedCards) >= $cardsLimit) {
                     break;
                 }
             }
 
-            $newCardTitle = sanitize_text((string)($_POST['card_new_title'] ?? ''));
-            $newCardText = sanitize_text((string)($_POST['card_new_text'] ?? ''));
-            $newCardButtonText = sanitize_text((string)($_POST['card_new_button_text'] ?? ''));
-            $newCardButtonLink = sanitize_text((string)($_POST['card_new_button_link'] ?? ''));
-            $newCardFile = $_FILES['card_new_file'] ?? null;
-            $newCardHasFile = is_array($newCardFile) && (int)($newCardFile['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_OK;
-            $newCardHasAnyInput = $newCardTitle !== '' || $newCardText !== '' || $newCardButtonText !== '' || $newCardButtonLink !== '' || $newCardHasFile;
+            $newCardTitles = isset($_POST['card_new_titles']) && is_array($_POST['card_new_titles']) ? $_POST['card_new_titles'] : [];
+            $newCardTexts = isset($_POST['card_new_texts']) && is_array($_POST['card_new_texts']) ? $_POST['card_new_texts'] : [];
+            $newCardButtonTexts = isset($_POST['card_new_button_texts']) && is_array($_POST['card_new_button_texts']) ? $_POST['card_new_button_texts'] : [];
+            $newCardButtonLinks = isset($_POST['card_new_button_links']) && is_array($_POST['card_new_button_links']) ? $_POST['card_new_button_links'] : [];
+            $newCardFiles = isset($_FILES['card_new_files']) && is_array($_FILES['card_new_files']) ? $_FILES['card_new_files'] : null;
+            $newCardFilesCount = is_array($newCardFiles) && isset($newCardFiles['name']) && is_array($newCardFiles['name']) ? count($newCardFiles['name']) : 0;
+            $newCardRowsCount = max(count($newCardTitles), count($newCardTexts), count($newCardButtonTexts), count($newCardButtonLinks), $newCardFilesCount);
 
-            if ($error === '' && $newCardHasAnyInput) {
-                if (count($updatedCards) >= 6) {
-                    $error = 'Limite de cards desta aba atingido (6). Remova um card antes de adicionar outro.';
+            for ($newCardIndex = 0; $error === '' && $newCardIndex < $newCardRowsCount; $newCardIndex++) {
+                $newCardTitle = sanitize_text((string)($newCardTitles[$newCardIndex] ?? ''));
+                $newCardText = sanitize_text((string)($newCardTexts[$newCardIndex] ?? ''));
+                $newCardButtonText = sanitize_text((string)($newCardButtonTexts[$newCardIndex] ?? ''));
+                $newCardButtonLink = sanitize_text((string)($newCardButtonLinks[$newCardIndex] ?? ''));
+
+                $newCardUploadError = UPLOAD_ERR_NO_FILE;
+                if (is_array($newCardFiles) && isset($newCardFiles['error']) && is_array($newCardFiles['error'])) {
+                    $newCardUploadError = (int)($newCardFiles['error'][$newCardIndex] ?? UPLOAD_ERR_NO_FILE);
                 }
-            }
+                $newCardHasFile = $newCardUploadError === UPLOAD_ERR_OK;
+                $newCardHasAnyInput = $newCardTitle !== '' || $newCardText !== '' || $newCardButtonText !== '' || $newCardButtonLink !== '' || $newCardHasFile;
+                if (!$newCardHasAnyInput) {
+                    continue;
+                }
 
-            if ($error === '' && is_array($newCardFile)) {
-                $newCardUploadError = (int)($newCardFile['error'] ?? UPLOAD_ERR_NO_FILE);
+                if (count($updatedCards) >= $cardsLimit) {
+                    $error = 'Limite de cards desta aba atingido (' . $cardsLimit . '). Aumente a quantidade maxima ou remova um card antes de adicionar outro.';
+                    break;
+                }
+
                 if ($newCardUploadError !== UPLOAD_ERR_OK && $newCardUploadError !== UPLOAD_ERR_NO_FILE) {
                     $error = upload_error_message($newCardUploadError);
+                    break;
                 }
-            }
 
-            $newCardImagePath = '';
-            if ($error === '' && is_array($newCardFile) && (int)($newCardFile['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_OK) {
-                $tmpName = (string)$newCardFile['tmp_name'];
-                $original = (string)$newCardFile['name'];
-                $ext = strtolower(pathinfo($original, PATHINFO_EXTENSION));
-                $allowed = ['jpg', 'jpeg', 'png', 'webp'];
-                $allowedMime = ['image/jpeg', 'image/png', 'image/webp'];
-                if (in_array($ext, $allowed, true)) {
-                    $mime = detect_uploaded_mime_type($tmpName);
-                    if ($mime !== '' && !in_array($mime, $allowedMime, true)) {
-                        $error = 'Nova imagem do card invalida. Envie JPG, PNG ou WEBP.';
-                    } elseif (!is_uploaded_file($tmpName)) {
-                        $error = 'Arquivo da nova imagem do card invalido.';
-                    } elseif (!is_writable(UPLOADS_DIR)) {
-                        $error = 'A pasta uploads/ nao tem permissao de escrita.';
-                    } else {
+                $newCardImagePath = '';
+                if ($newCardUploadError === UPLOAD_ERR_OK) {
+                    $tmpName = is_array($newCardFiles) && isset($newCardFiles['tmp_name']) && is_array($newCardFiles['tmp_name'])
+                        ? (string)($newCardFiles['tmp_name'][$newCardIndex] ?? '')
+                        : '';
+                    $original = is_array($newCardFiles) && isset($newCardFiles['name']) && is_array($newCardFiles['name'])
+                        ? (string)($newCardFiles['name'][$newCardIndex] ?? '')
+                        : '';
+                    $ext = strtolower(pathinfo($original, PATHINFO_EXTENSION));
+                    $allowed = ['jpg', 'jpeg', 'png', 'webp'];
+                    $allowedMime = ['image/jpeg', 'image/png', 'image/webp'];
+                    if (in_array($ext, $allowed, true)) {
+                        $mime = detect_uploaded_mime_type($tmpName);
+                        if ($mime !== '' && !in_array($mime, $allowedMime, true)) {
+                            $error = 'Nova imagem do card invalida. Envie JPG, PNG ou WEBP.';
+                            break;
+                        }
+                        if (!is_uploaded_file($tmpName)) {
+                            $error = 'Arquivo da nova imagem do card invalido.';
+                            break;
+                        }
+                        if (!is_writable(UPLOADS_DIR)) {
+                            $error = 'A pasta uploads/ nao tem permissao de escrita.';
+                            break;
+                        }
                         $maxCardId++;
-                        $filename = 'card-' . $id . '-' . $maxCardId . '-' . time() . '.' . $ext;
+                        $filename = 'card-' . $id . '-' . $maxCardId . '-' . time() . '-' . $newCardIndex . '.' . $ext;
                         $destination = UPLOADS_DIR . DIRECTORY_SEPARATOR . $filename;
                         if (move_uploaded_file($tmpName, $destination)) {
                             $newCardImagePath = UPLOADS_URL . '/' . $filename;
                         } else {
                             $error = 'Falha ao salvar nova imagem do card em uploads/.';
+                            break;
                         }
+                    } else {
+                        $error = 'Formato invalido para nova imagem do card. Use JPG, PNG ou WEBP.';
+                        break;
                     }
-                } else {
-                    $error = 'Formato invalido para nova imagem do card. Use JPG, PNG ou WEBP.';
                 }
-            }
 
-            if ($error === '' && $newCardHasAnyInput) {
                 if ($newCardTitle === '' && $newCardText === '' && $newCardImagePath === '') {
                     $error = 'Para adicionar um card, preencha titulo, descricao ou envie uma imagem.';
-                } else {
-                    if ($newCardImagePath === '') {
-                        $maxCardId++;
-                    }
-                    $updatedCards[] = [
-                        'id' => $maxCardId,
-                        'title' => $newCardTitle,
-                        'text' => $newCardText,
-                        'image' => $newCardImagePath,
-                        'button_text' => $newCardButtonText,
-                        'button_link' => $newCardButtonLink,
-                        'order' => count($updatedCards) + 1,
-                    ];
+                    break;
                 }
+
+                if ($newCardImagePath === '') {
+                    $maxCardId++;
+                }
+                $updatedCards[] = [
+                    'id' => $maxCardId,
+                    'title' => $newCardTitle,
+                    'text' => $newCardText,
+                    'image' => $newCardImagePath,
+                    'button_text' => $newCardButtonText,
+                    'button_link' => $newCardButtonLink,
+                    'order' => count($updatedCards) + 1,
+                ];
             }
 
             foreach ($updatedCards as $updatedIndex => &$cardItem) {
                 $cardItem['order'] = $updatedIndex + 1;
             }
             unset($cardItem);
-            $data['sections'][$index]['cards_items'] = array_slice($updatedCards, 0, 6);
+            $data['sections'][$index]['cards_items'] = array_slice($updatedCards, 0, $cardsLimit);
 
             save_site_data($data);
             if ($error === '') {
@@ -1318,6 +1367,14 @@ $postMaxSize = (string)ini_get('post_max_size');
                     <label>Tamanho do nome da empresa (px)
                         <input type="number" name="brand_size" min="12" max="252" value="<?= (int)($meta['brand_size'] ?? 18) ?>">
                     </label>
+                    <label>Exibicao no menu
+                        <select name="brand_display">
+                            <?php $brandDisplay = (string)($meta['brand_display'] ?? 'both'); ?>
+                            <option value="text" <?= $brandDisplay === 'text' ? 'selected' : '' ?>>Somente nome</option>
+                            <option value="logo" <?= $brandDisplay === 'logo' ? 'selected' : '' ?>>Somente logo</option>
+                            <option value="both" <?= $brandDisplay === 'both' ? 'selected' : '' ?>>Logo + nome</option>
+                        </select>
+                    </label>
                     <label class="full">Logo da empresa (JPG, PNG, WEBP, SVG)
                         <input type="file" name="logo_image" accept=".jpg,.jpeg,.png,.webp,.svg">
                     </label>
@@ -1373,6 +1430,9 @@ $postMaxSize = (string)ini_get('post_max_size');
                 <div class="mode-config-group" data-hero-group="text_content">
                     <div class="section-config-title">Conteudo textual da aba principal</div>
                     <div class="feature-grid">
+                        <label class="full">Texto de apoio (acima do titulo)
+                            <input type="text" name="hero_overline" value="<?= e($meta['hero_overline'] ?? 'Apresentacao profissional') ?>" placeholder="Apresentacao profissional">
+                        </label>
                         <label>Titulo principal
                             <input type="text" name="headline" value="<?= e($meta['headline'] ?? '') ?>" required>
                         </label>
@@ -1731,6 +1791,15 @@ $postMaxSize = (string)ini_get('post_max_size');
                     <label>Titulo da secao de cards
                         <input type="text" name="cards_title" placeholder="Nossos servicos">
                     </label>
+                    <label>Quantidade maxima de cards desta aba
+                        <input type="number" name="cards_limit" min="1" max="8" value="6">
+                    </label>
+                    <label>Espacamento entre os cards
+                        <select name="cards_spacing">
+                            <option value="spaced" selected>Com espacos entre os cards</option>
+                            <option value="compact">Sem espacos (cards juntos, mesma largura)</option>
+                        </select>
+                    </label>
                 </div>
                 <p class="muted-note">Depois de criar, edite a aba para cadastrar os cards (com imagem ou so texto).</p>
             </div>
@@ -2034,6 +2103,15 @@ $postMaxSize = (string)ini_get('post_max_size');
                             <label>Titulo da secao de cards
                                 <input type="text" name="cards_title" value="<?= e($section['cards_title'] ?? '') ?>" placeholder="Destinos em destaque">
                             </label>
+                            <label>Quantidade maxima de cards desta aba
+                                <input type="number" name="cards_limit" min="1" max="8" value="<?= (int)normalize_cards_limit($section['cards_limit'] ?? 6) ?>">
+                            </label>
+                            <label>Espacamento entre os cards
+                                <select name="cards_spacing">
+                                    <option value="spaced" <?= normalize_cards_spacing($section['cards_spacing'] ?? 'spaced') === 'spaced' ? 'selected' : '' ?>>Com espacos entre os cards</option>
+                                    <option value="compact" <?= normalize_cards_spacing($section['cards_spacing'] ?? 'spaced') === 'compact' ? 'selected' : '' ?>>Sem espacos (cards juntos, mesma largura)</option>
+                                </select>
+                            </label>
                         </div>
                     </div>
                     <div class="full feature-config-group" data-section-function="linked_gallery">
@@ -2086,6 +2164,7 @@ $postMaxSize = (string)ini_get('post_max_size');
                         <?php
                         $linkedImages = is_array($section['linked_images'] ?? null) ? $section['linked_images'] : [];
                         $linkedImagesLimit = normalize_linked_images_limit($section['linked_images_limit'] ?? 6);
+                        $remainingLinkedSlots = max(0, $linkedImagesLimit - count($linkedImages));
                         ?>
                         <p class="full muted-note">Imagens atuais: <?= count($linkedImages) ?> de <?= $linkedImagesLimit ?>.</p>
                         <p class="full muted-note">Limites atuais do servidor: upload_max_filesize=<?= e($uploadMaxFilesize) ?> e post_max_size=<?= e($postMaxSize) ?>.</p>
@@ -2102,116 +2181,156 @@ $postMaxSize = (string)ini_get('post_max_size');
                             $linkedImageAlt = (string)($linkedImage['alt'] ?? '');
                             $linkedImagePath = (string)($linkedImage['image'] ?? '');
                             ?>
-                            <input type="hidden" name="linked_image_ids[]" value="<?= $linkedImageId ?>">
-                            <label>Link da imagem #<?= $linkedImageId ?>
-                                <input type="url" name="linked_image_links[]" value="<?= e($linkedImageLink) ?>" placeholder="https://seusite.com/pagina">
-                            </label>
-                            <label>Texto ALT da imagem #<?= $linkedImageId ?>
-                                <input type="text" name="linked_image_alts[]" value="<?= e($linkedImageAlt) ?>" placeholder="Descricao da imagem">
-                            </label>
-                            <label>Trocar arquivo da imagem #<?= $linkedImageId ?> (JPG, PNG, WEBP)
-                                <input type="file" name="linked_image_files[]" accept=".jpg,.jpeg,.png,.webp">
-                            </label>
-                            <label class="inline-check">
-                                <input type="checkbox" name="linked_image_remove_ids[]" value="<?= $linkedImageId ?>">
-                                <span>Remover imagem #<?= $linkedImageId ?></span>
-                            </label>
-                            <?php if ($linkedImagePath !== ''): ?>
-                                <div class="full preview-wrap">
-                                    <?php if ($linkedImageLink !== ''): ?>
-                                        <a href="<?= e($linkedImageLink) ?>" target="_blank" rel="noopener">
-                                            <img src="../<?= e($linkedImagePath) ?>" alt="<?= e($linkedImageAlt !== '' ? $linkedImageAlt : 'Imagem vinculada') ?>" class="preview linked-preview">
-                                        </a>
-                                    <?php else: ?>
-                                        <img src="../<?= e($linkedImagePath) ?>" alt="<?= e($linkedImageAlt !== '' ? $linkedImageAlt : 'Imagem vinculada') ?>" class="preview linked-preview">
-                                    <?php endif; ?>
+                            <div class="full item-editor">
+                                <div class="item-editor-title">Imagem #<?= $linkedImageId ?></div>
+                                <div class="feature-grid">
+                                    <input type="hidden" name="linked_image_ids[]" value="<?= $linkedImageId ?>">
+                                    <label>Link da imagem #<?= $linkedImageId ?>
+                                        <input type="url" name="linked_image_links[]" value="<?= e($linkedImageLink) ?>" placeholder="https://seusite.com/pagina">
+                                    </label>
+                                    <label>Texto ALT da imagem #<?= $linkedImageId ?>
+                                        <input type="text" name="linked_image_alts[]" value="<?= e($linkedImageAlt) ?>" placeholder="Descricao da imagem">
+                                    </label>
+                                    <label>Trocar arquivo da imagem #<?= $linkedImageId ?> (JPG, PNG, WEBP)
+                                        <input type="file" name="linked_image_files[]" accept=".jpg,.jpeg,.png,.webp">
+                                    </label>
+                                    <label class="inline-check">
+                                        <input type="checkbox" name="linked_image_remove_ids[]" value="<?= $linkedImageId ?>">
+                                        <span>Remover imagem #<?= $linkedImageId ?></span>
+                                    </label>
                                 </div>
-                            <?php endif; ?>
+                                <?php if ($linkedImagePath !== ''): ?>
+                                    <div class="preview-wrap">
+                                        <?php if ($linkedImageLink !== ''): ?>
+                                            <a href="<?= e($linkedImageLink) ?>" target="_blank" rel="noopener">
+                                                <img src="../<?= e($linkedImagePath) ?>" alt="<?= e($linkedImageAlt !== '' ? $linkedImageAlt : 'Imagem vinculada') ?>" class="preview linked-preview">
+                                            </a>
+                                        <?php else: ?>
+                                            <img src="../<?= e($linkedImagePath) ?>" alt="<?= e($linkedImageAlt !== '' ? $linkedImageAlt : 'Imagem vinculada') ?>" class="preview linked-preview">
+                                        <?php endif; ?>
+                                    </div>
+                                <?php endif; ?>
+                            </div>
                         <?php endforeach; ?>
-                        <?php if (count($linkedImages) < $linkedImagesLimit): ?>
-                            <label>Nova imagem da galeria (JPG, PNG, WEBP)
-                                <input type="file" name="linked_image_new_file" accept=".jpg,.jpeg,.png,.webp">
-                            </label>
-                            <label>Link da nova imagem
-                                <input type="url" name="linked_image_new_link" placeholder="https://seusite.com/pagina">
-                            </label>
-                            <label>Texto ALT da nova imagem
-                                <input type="text" name="linked_image_new_alt" placeholder="Descricao da imagem">
-                            </label>
+                        <?php if ($remainingLinkedSlots > 0): ?>
+                            <div class="full item-editor">
+                                <div class="item-editor-title">Novas imagens (preencha ate <?= $remainingLinkedSlots ?>)</div>
+                                <?php for ($newLinkedSlot = 1; $newLinkedSlot <= $remainingLinkedSlots; $newLinkedSlot++): ?>
+                                    <div class="feature-grid">
+                                        <label>Nova imagem #<?= $newLinkedSlot ?> (JPG, PNG, WEBP)
+                                            <input type="file" name="linked_image_new_files[]" accept=".jpg,.jpeg,.png,.webp">
+                                        </label>
+                                        <label>Link da nova imagem #<?= $newLinkedSlot ?>
+                                            <input type="url" name="linked_image_new_links[]" placeholder="https://seusite.com/pagina">
+                                        </label>
+                                        <label class="full">Texto ALT da nova imagem #<?= $newLinkedSlot ?>
+                                            <input type="text" name="linked_image_new_alts[]" placeholder="Descricao da imagem">
+                                        </label>
+                                    </div>
+                                <?php endfor; ?>
+                            </div>
                         <?php else: ?>
                             <p class="full muted-note">Limite da galeria atingido para esta aba. Aumente a quantidade maxima ou remova uma imagem.</p>
                         <?php endif; ?>
                     </div>
                     <div class="full feature-config-group" data-section-function="cards_media cards_text">
-                        <div class="section-config-title">Gerenciar: Cards (maximo 6)</div>
+                        <div class="section-config-title">Gerenciar: Cards</div>
                         <?php
                         $cardsItems = is_array($section['cards_items'] ?? null) ? $section['cards_items'] : [];
-                        $cardsItems = array_slice($cardsItems, 0, 6);
+                        $cardsLimit = normalize_cards_limit($section['cards_limit'] ?? 6);
+                        $cardsItems = array_slice($cardsItems, 0, $cardsLimit);
+                        $remainingCardsSlots = max(0, $cardsLimit - count($cardsItems));
                         ?>
-                        <p class="full muted-note">Cards atuais: <?= count($cardsItems) ?> de 6.</p>
+                        <p class="full muted-note">Cards atuais: <?= count($cardsItems) ?> de <?= $cardsLimit ?>.</p>
                         <?php if (count($cardsItems) === 0): ?>
                             <p class="full muted-note">Nenhum card cadastrado nesta aba ainda.</p>
                         <?php endif; ?>
-                        <?php foreach ($cardsItems as $cardItem): ?>
+                        <?php foreach ($cardsItems as $cardIndex => $cardItem): ?>
                             <?php
                             $cardId = (int)($cardItem['id'] ?? 0);
                             if ($cardId <= 0) {
                                 continue;
                             }
+                            $cardNumber = (int)$cardIndex + 1;
                             $cardTitle = (string)($cardItem['title'] ?? '');
                             $cardText = (string)($cardItem['text'] ?? '');
                             $cardImagePath = (string)($cardItem['image'] ?? '');
                             $cardButtonText = (string)($cardItem['button_text'] ?? '');
                             $cardButtonLink = (string)($cardItem['button_link'] ?? '');
                             ?>
-                            <input type="hidden" name="card_ids[]" value="<?= $cardId ?>">
-                            <label>Titulo do card #<?= $cardId ?>
-                                <input type="text" name="card_titles[]" value="<?= e($cardTitle) ?>" placeholder="Titulo do card">
-                            </label>
-                            <label>Descricao do card #<?= $cardId ?>
-                                <textarea name="card_texts[]" rows="4" placeholder="Descricao do card"><?= e($cardText) ?></textarea>
-                            </label>
-                            <label>Texto do botao do card #<?= $cardId ?>
-                                <input type="text" name="card_button_texts[]" value="<?= e($cardButtonText) ?>" placeholder="Saiba mais">
-                            </label>
-                            <label>Link do botao do card #<?= $cardId ?>
-                                <input type="url" name="card_button_links[]" value="<?= e($cardButtonLink) ?>" placeholder="https://seusite.com/pagina">
-                            </label>
-                            <label data-section-function="cards_media">Trocar imagem do card #<?= $cardId ?> (JPG, PNG, WEBP)
-                                <input type="file" name="card_image_files[]" accept=".jpg,.jpeg,.png,.webp">
-                            </label>
-                            <label class="inline-check" data-section-function="cards_media">
-                                <input type="checkbox" name="card_remove_image_ids[]" value="<?= $cardId ?>">
-                                <span>Remover imagem do card #<?= $cardId ?></span>
-                            </label>
-                            <label class="inline-check">
-                                <input type="checkbox" name="card_remove_ids[]" value="<?= $cardId ?>">
-                                <span>Remover card #<?= $cardId ?></span>
-                            </label>
-                            <?php if ($cardImagePath !== ''): ?>
-                                <div class="full preview-wrap" data-section-function="cards_media">
-                                    <img src="../<?= e($cardImagePath) ?>" alt="<?= e($cardTitle !== '' ? $cardTitle : 'Imagem do card') ?>" class="preview linked-preview">
+                            <div class="full item-editor item-editor-card" data-collapsible="true">
+                                <div class="item-editor-head">
+                                    <div class="item-editor-title">Card <?= $cardNumber ?></div>
+                                    <button type="button" class="item-toggle" data-label-open="Minimizar" data-label-closed="Expandir" aria-expanded="true">Minimizar</button>
                                 </div>
-                            <?php endif; ?>
+                                <div class="item-editor-body">
+                                    <div class="feature-grid">
+                                        <input type="hidden" name="card_ids[]" value="<?= $cardId ?>">
+                                        <label class="full">Titulo
+                                            <input type="text" name="card_titles[]" value="<?= e($cardTitle) ?>" placeholder="Titulo do card">
+                                        </label>
+                                        <label class="full">Descricao
+                                            <textarea name="card_texts[]" rows="4" placeholder="Descricao do card"><?= e($cardText) ?></textarea>
+                                        </label>
+                                        <label>Texto do botao
+                                            <input type="text" name="card_button_texts[]" value="<?= e($cardButtonText) ?>" placeholder="Saiba mais">
+                                        </label>
+                                        <label>Link do botao
+                                            <input type="url" name="card_button_links[]" value="<?= e($cardButtonLink) ?>" placeholder="https://seusite.com/pagina">
+                                        </label>
+                                        <label data-section-function="cards_media">Trocar imagem (JPG, PNG, WEBP)
+                                            <input type="file" name="card_image_files[]" accept=".jpg,.jpeg,.png,.webp">
+                                        </label>
+                                        <label class="inline-check" data-section-function="cards_media">
+                                            <input type="checkbox" name="card_remove_image_ids[]" value="<?= $cardId ?>">
+                                            <span>Remover imagem</span>
+                                        </label>
+                                        <label class="inline-check full">
+                                            <input type="checkbox" name="card_remove_ids[]" value="<?= $cardId ?>">
+                                            <span>Remover card</span>
+                                        </label>
+                                    </div>
+                                    <?php if ($cardImagePath !== ''): ?>
+                                        <div class="preview-wrap" data-section-function="cards_media">
+                                            <img src="../<?= e($cardImagePath) ?>" alt="<?= e($cardTitle !== '' ? $cardTitle : 'Imagem do card') ?>" class="preview linked-preview">
+                                        </div>
+                                    <?php endif; ?>
+                                </div>
+                            </div>
                         <?php endforeach; ?>
-                        <?php if (count($cardsItems) < 6): ?>
-                            <label>Titulo do novo card
-                                <input type="text" name="card_new_title" placeholder="Titulo do card">
-                            </label>
-                            <label>Descricao do novo card
-                                <textarea name="card_new_text" rows="4" placeholder="Descricao do card"></textarea>
-                            </label>
-                            <label>Texto do botao do novo card
-                                <input type="text" name="card_new_button_text" placeholder="Saiba mais">
-                            </label>
-                            <label>Link do botao do novo card
-                                <input type="url" name="card_new_button_link" placeholder="https://seusite.com/pagina">
-                            </label>
-                            <label data-section-function="cards_media">Imagem do novo card (opcional, JPG, PNG, WEBP)
-                                <input type="file" name="card_new_file" accept=".jpg,.jpeg,.png,.webp">
-                            </label>
+                        <?php if ($remainingCardsSlots > 0): ?>
+                            <?php $nextCardNumber = count($cardsItems) + 1; ?>
+                            <p class="full muted-note">Novos cards disponiveis para cadastro: <?= $remainingCardsSlots ?> (de <?= $nextCardNumber ?> ate <?= $cardsLimit ?>).</p>
+                            <?php for ($newCardSlot = 1; $newCardSlot <= $remainingCardsSlots; $newCardSlot++): ?>
+                                <?php $newCardNumber = count($cardsItems) + $newCardSlot; ?>
+                                <div class="full item-editor item-editor-card<?= $newCardSlot > 1 ? ' is-collapsed' : '' ?>" data-collapsible="true">
+                                    <div class="item-editor-head">
+                                        <div class="item-editor-title">Novo card <?= (int)$newCardNumber ?></div>
+                                        <button type="button" class="item-toggle" data-label-open="Minimizar" data-label-closed="Expandir" aria-expanded="<?= $newCardSlot > 1 ? 'false' : 'true' ?>"><?= $newCardSlot > 1 ? 'Expandir' : 'Minimizar' ?></button>
+                                    </div>
+                                    <div class="item-editor-body">
+                                        <div class="feature-grid">
+                                            <label class="full">Titulo
+                                                <input type="text" name="card_new_titles[]" placeholder="Titulo do card">
+                                            </label>
+                                            <label class="full">Descricao
+                                                <textarea name="card_new_texts[]" rows="4" placeholder="Descricao do card"></textarea>
+                                            </label>
+                                            <label>Texto do botao
+                                                <input type="text" name="card_new_button_texts[]" placeholder="Saiba mais">
+                                            </label>
+                                            <label>Link do botao
+                                                <input type="url" name="card_new_button_links[]" placeholder="https://seusite.com/pagina">
+                                            </label>
+                                            <label data-section-function="cards_media">Imagem (opcional, JPG, PNG, WEBP)
+                                                <input type="file" name="card_new_files[]" accept=".jpg,.jpeg,.png,.webp">
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+                            <?php endfor; ?>
                         <?php else: ?>
-                            <p class="full muted-note">Limite de cards atingido para esta aba. Remova um card para adicionar outro.</p>
+                            <p class="full muted-note">Limite de cards atingido para esta aba. Aumente a quantidade maxima ou remova um card.</p>
                         <?php endif; ?>
                     </div>
 

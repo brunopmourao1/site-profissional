@@ -407,6 +407,10 @@ input:focus, select:focus, textarea:focus {
     display: none;
 }
 
+.is-hidden {
+    display: none !important;
+}
+
 .section-form > label {
     padding: 10px;
     border: 1px solid #c9d6e4;
@@ -468,6 +472,64 @@ input:focus, select:focus, textarea:focus {
     object-fit: contain;
     background: #fff;
 }
+
+.item-editor {
+    border: 1px solid #bfd0e0;
+    border-radius: 10px;
+    background: rgba(238, 244, 251, 0.78);
+    padding: 10px;
+    display: grid;
+    gap: 10px;
+}
+
+.item-editor-title {
+    font-weight: 700;
+    color: #22435f;
+    font-size: .88rem;
+}
+
+.item-editor-card {
+    padding: 0;
+    overflow: hidden;
+}
+
+.item-editor-card .item-editor-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 10px 12px;
+    background: rgba(20, 80, 122, 0.10);
+    border-bottom: 1px solid #bfd0e0;
+}
+
+.item-editor-card .item-editor-title {
+    margin: 0;
+    color: #0f3d5f;
+    font-size: .92rem;
+}
+
+.item-editor-card .item-editor-body {
+    padding: 10px 12px;
+    display: grid;
+    gap: 10px;
+}
+
+.item-editor-card.is-collapsed .item-editor-body {
+    display: none;
+}
+
+.item-toggle {
+    background: #ecf3f9;
+    color: #1b3248;
+    border: 1px solid #cad8e6;
+    border-radius: 8px;
+    padding: 6px 9px;
+    font-size: .8rem;
+    font-weight: 700;
+}
+
+.item-toggle:hover { background: #deebf6; }
 
 .success, .alert {
     padding: 10px 11px;

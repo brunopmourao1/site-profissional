@@ -8,6 +8,7 @@ function default_site_data(): array
     return [
         'meta' => [
             'site_name' => 'Minha Empresa',
+            'brand_display' => 'both',
             'logo_image' => '',
             'logo_alt' => 'Logo da empresa',
             'hero_video' => '',
@@ -18,6 +19,7 @@ function default_site_data(): array
             'hero_split_fit' => 'cover',
             'hero_split_width' => 0,
             'hero_split_height' => 0,
+            'hero_overline' => 'Apresentacao profissional',
             'headline' => 'Solucoes profissionais para o seu negocio',
             'hero_text_color' => '#f6f2eb',
             'intro' => 'Apresente aqui a proposta de valor da sua empresa em poucas linhas.',
@@ -90,6 +92,8 @@ function default_site_data(): array
                 'linked_images_layout' => 'boxed',
                 'cards_title' => '',
                 'cards_style' => 'media',
+                'cards_spacing' => 'spaced',
+                'cards_limit' => 6,
                 'cards_items' => [],
                 'background_color' => '#f6f4ef',
                 'background_image' => '',
@@ -132,6 +136,8 @@ function default_site_data(): array
                 'linked_images_layout' => 'boxed',
                 'cards_title' => '',
                 'cards_style' => 'media',
+                'cards_spacing' => 'spaced',
+                'cards_limit' => 6,
                 'cards_items' => [],
                 'background_color' => '#ffffff',
                 'background_image' => '',
@@ -174,6 +180,8 @@ function default_site_data(): array
                 'linked_images_layout' => 'boxed',
                 'cards_title' => '',
                 'cards_style' => 'media',
+                'cards_spacing' => 'spaced',
+                'cards_limit' => 6,
                 'cards_items' => [],
                 'background_color' => '#f6f4ef',
                 'background_image' => '',
@@ -216,6 +224,8 @@ function default_site_data(): array
                 'linked_images_layout' => 'boxed',
                 'cards_title' => '',
                 'cards_style' => 'media',
+                'cards_spacing' => 'spaced',
+                'cards_limit' => 6,
                 'cards_items' => [],
                 'background_color' => '#ffffff',
                 'background_image' => '',
@@ -257,6 +267,13 @@ function load_site_data(): array
     if (!isset($data['meta']) || !is_array($data['meta'])) {
         $data['meta'] = [];
     }
+    if (!isset($data['meta']['site_name']) || !is_string($data['meta']['site_name']) || trim($data['meta']['site_name']) === '') {
+        $data['meta']['site_name'] = 'Minha Empresa';
+    }
+    if (!isset($data['meta']['brand_display']) || !is_string($data['meta']['brand_display'])) {
+        $data['meta']['brand_display'] = 'both';
+    }
+    $data['meta']['brand_display'] = normalize_brand_display($data['meta']['brand_display']);
     if (!isset($data['meta']['logo_image']) || !is_string($data['meta']['logo_image'])) {
         $data['meta']['logo_image'] = '';
     }
@@ -271,6 +288,9 @@ function load_site_data(): array
     }
     if (!isset($data['meta']['hero_mode']) || !is_string($data['meta']['hero_mode'])) {
         $data['meta']['hero_mode'] = 'text';
+    }
+    if (!isset($data['meta']['hero_overline']) || !is_string($data['meta']['hero_overline'])) {
+        $data['meta']['hero_overline'] = 'Apresentacao profissional';
     }
     if (!isset($data['meta']['hero_text_color']) || !is_string($data['meta']['hero_text_color'])) {
         $data['meta']['hero_text_color'] = '#f6f2eb';
@@ -538,6 +558,14 @@ function load_site_data(): array
         if (!in_array($section['cards_style'], ['media', 'text'], true)) {
             $section['cards_style'] = 'media';
         }
+        if (!isset($section['cards_spacing']) || !is_string($section['cards_spacing'])) {
+            $section['cards_spacing'] = 'spaced';
+        }
+        $section['cards_spacing'] = normalize_cards_spacing($section['cards_spacing']);
+        if (!isset($section['cards_limit']) || !is_numeric($section['cards_limit'])) {
+            $section['cards_limit'] = 6;
+        }
+        $section['cards_limit'] = normalize_cards_limit($section['cards_limit']);
         if (!isset($section['cards_items']) || !is_array($section['cards_items'])) {
             $section['cards_items'] = [];
         }
@@ -571,7 +599,7 @@ function load_site_data(): array
                 'button_link' => $cardButtonLink,
                 'order' => count($normalizedCards) + 1,
             ];
-            if (count($normalizedCards) >= 6) {
+            if (count($normalizedCards) >= $section['cards_limit']) {
                 break;
             }
         }
@@ -709,6 +737,16 @@ function normalize_dimension_size(mixed $value): int
     return $size;
 }
 
+function normalize_brand_display(mixed $value): string
+{
+    $display = trim((string)$value);
+    if (!in_array($display, ['text', 'logo', 'both'], true)) {
+        return 'both';
+    }
+
+    return $display;
+}
+
 function normalize_linked_images_limit(mixed $value): int
 {
     $limit = (int)$value;
@@ -720,6 +758,29 @@ function normalize_linked_images_limit(mixed $value): int
     }
 
     return $limit;
+}
+
+function normalize_cards_limit(mixed $value): int
+{
+    $limit = (int)$value;
+    if ($limit < 1) {
+        return 1;
+    }
+    if ($limit > 8) {
+        return 8;
+    }
+
+    return $limit;
+}
+
+function normalize_cards_spacing(mixed $value): string
+{
+    $spacing = trim((string)$value);
+    if (!in_array($spacing, ['spaced', 'compact'], true)) {
+        return 'spaced';
+    }
+
+    return $spacing;
 }
 
 function normalize_media_type(mixed $value): string

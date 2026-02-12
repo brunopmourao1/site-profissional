@@ -112,6 +112,29 @@ document.querySelectorAll('.mini-toggle').forEach((button) => {
   });
 });
 
+function setItemEditorCollapsed(editorItem, collapsed) {
+  editorItem.classList.toggle('is-collapsed', collapsed);
+  const button = editorItem.querySelector('.item-toggle');
+  if (button) {
+    button.textContent = collapsed
+      ? (button.dataset.labelClosed || 'Expandir')
+      : (button.dataset.labelOpen || 'Minimizar');
+    button.setAttribute('aria-expanded', String(!collapsed));
+  }
+}
+
+document.querySelectorAll('.item-toggle').forEach((button) => {
+  button.addEventListener('click', () => {
+    const editorItem = button.closest('.item-editor');
+    if (!editorItem) return;
+    setItemEditorCollapsed(editorItem, !editorItem.classList.contains('is-collapsed'));
+  });
+});
+
+document.querySelectorAll('.item-editor[data-collapsible="true"]').forEach((editorItem) => {
+  setItemEditorCollapsed(editorItem, editorItem.classList.contains('is-collapsed'));
+});
+
 document.querySelectorAll('.section-item[data-section-id]').forEach((section) => {
   setSectionCollapsed(section, section.classList.contains('is-collapsed'));
 });

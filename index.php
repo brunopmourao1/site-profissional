@@ -8,6 +8,10 @@ $meta = $data['meta'];
 $sections = $data['sections'];
 $brandFont = resolve_font_family((string)($meta['brand_font'] ?? 'sora'));
 $brandSize = normalize_text_size($meta['brand_size'] ?? 18);
+$brandDisplay = normalize_brand_display($meta['brand_display'] ?? 'both');
+$brandHasLogo = !empty($meta['logo_image']);
+$brandShowLogo = ($brandDisplay === 'logo' || $brandDisplay === 'both') && $brandHasLogo;
+$brandShowText = ($brandDisplay === 'text' || $brandDisplay === 'both') || (!$brandHasLogo && $brandDisplay === 'logo');
 $headlineFont = resolve_font_family((string)($meta['headline_font'] ?? 'sora'));
 $headlineSize = normalize_text_size($meta['headline_size'] ?? 42);
 $heroTextColor = (string)($meta['hero_text_color'] ?? '#f6f2eb');
@@ -17,6 +21,7 @@ $footerFont = resolve_font_family((string)($meta['footer_font'] ?? 'manrope'));
 $footerSize = normalize_text_size($meta['footer_size'] ?? 16);
 $animationStyle = (string)($meta['animation_style'] ?? 'slide');
 $heroMotion = (string)($meta['hero_motion'] ?? 'soft');
+$heroOverline = trim((string)($meta['hero_overline'] ?? 'Apresentacao profissional'));
 $heroMode = (string)($meta['hero_mode'] ?? 'text');
 $heroVideo = (string)($meta['hero_video'] ?? '');
 $heroImage = (string)($meta['hero_image'] ?? '');
@@ -39,6 +44,7 @@ if ($heroSplitWidth > 0) {
 if ($heroSplitHeight > 0) {
     $heroSplitStyle .= '--hero-split-height:' . $heroSplitHeight . 'px;';
 }
+$heroSplitHasCustomWidth = $heroSplitWidth > 0;
 $heroSplitHasCustomHeight = $heroSplitHeight > 0;
 ?>
 <!doctype html>
@@ -51,11 +57,13 @@ $heroSplitHasCustomHeight = $heroSplitHeight > 0;
 </head>
 <body class="anim-<?= e($animationStyle) ?> hero-<?= e($heroMotion) ?>">
 <header class="topbar">
-    <a class="brand" href="index.php#inicio" aria-label="Ir para o inicio do site">
-        <?php if (!empty($meta['logo_image'])): ?>
+    <a class="brand brand-mode-<?= e($brandDisplay) ?>" href="index.php#inicio" aria-label="Ir para o inicio do site">
+        <?php if ($brandShowLogo): ?>
             <img src="<?= e($meta['logo_image']) ?>" alt="<?= e($meta['logo_alt'] ?? 'Logo da empresa') ?>" class="brand-logo">
         <?php endif; ?>
-        <span class="brand-text" style="font-family: <?= e($brandFont) ?>; font-size: <?= $brandSize ?>px;"><?= e($meta['site_name'] ?? 'Minha Empresa') ?></span>
+        <?php if ($brandShowText): ?>
+            <span class="brand-text" style="font-family: <?= e($brandFont) ?>; font-size: <?= $brandSize ?>px;"><?= e($meta['site_name'] ?? 'Minha Empresa') ?></span>
+        <?php endif; ?>
     </a>
     <button class="menu-toggle" aria-label="Abrir menu">Menu</button>
     <nav class="menu" id="menu">
@@ -74,7 +82,7 @@ $heroSplitHasCustomHeight = $heroSplitHeight > 0;
     <?php elseif ($heroModeEffective === 'video_background' && $heroVideo !== ''): ?>
         <video class="hero-bg-video" src="<?= e($heroVideo) ?>" autoplay muted loop playsinline preload="metadata" disablepictureinpicture noremoteplayback></video>
         <div class="hero-content reveal anim-<?= e($animationStyle) ?>" style="color: <?= e($heroTextColor) ?>;">
-            <p class="overline">Apresentacao profissional</p>
+            <?php if ($heroOverline !== ''): ?><p class="overline"><?= e($heroOverline) ?></p><?php endif; ?>
             <h1 style="font-family: <?= e($headlineFont) ?>; font-size: clamp(2rem, 6vw, <?= $headlineSize ?>px);"><?= e($meta['headline'] ?? '') ?></h1>
             <p style="font-family: <?= e($introFont) ?>; font-size: <?= $introSize ?>px;"><?= nl2br(e($meta['intro'] ?? '')) ?></p>
             <div class="hero-cta">
@@ -85,12 +93,12 @@ $heroSplitHasCustomHeight = $heroSplitHeight > 0;
             </div>
         </div>
     <?php elseif ($heroModeEffective === 'video_split' && $heroVideo !== ''): ?>
-        <div class="split-wrap hero-split-wrap split-size-<?= e($heroSplitSizeEffective) ?> split-fit-<?= e($heroSplitFitEffective) ?> hero-split-<?= e($heroLayoutEffective) ?><?= $heroSplitHasCustomHeight ? ' has-custom-height' : '' ?> reveal anim-<?= e($animationStyle) ?>"<?= $heroSplitStyle !== '' ? ' style="' . e($heroSplitStyle) . '"' : '' ?>>
+        <div class="split-wrap hero-split-wrap split-size-<?= e($heroSplitSizeEffective) ?> split-fit-<?= e($heroSplitFitEffective) ?> hero-split-<?= e($heroLayoutEffective) ?><?= $heroSplitHasCustomWidth ? ' has-custom-width' : '' ?><?= $heroSplitHasCustomHeight ? ' has-custom-height' : '' ?> reveal anim-<?= e($animationStyle) ?>"<?= $heroSplitStyle !== '' ? ' style="' . e($heroSplitStyle) . '"' : '' ?>>
             <div class="split-media hero-split-media">
                 <video class="split-video" src="<?= e($heroVideo) ?>" autoplay muted loop playsinline preload="metadata" disablepictureinpicture noremoteplayback></video>
             </div>
             <div class="split-text hero-split-text" style="color: <?= e($heroTextColor) ?>;">
-                <p class="overline">Apresentacao profissional</p>
+                <?php if ($heroOverline !== ''): ?><p class="overline"><?= e($heroOverline) ?></p><?php endif; ?>
                 <h1 style="font-family: <?= e($headlineFont) ?>; font-size: clamp(2rem, 6vw, <?= $headlineSize ?>px);"><?= e($meta['headline'] ?? '') ?></h1>
                 <p style="font-family: <?= e($introFont) ?>; font-size: <?= $introSize ?>px;"><?= nl2br(e($meta['intro'] ?? '')) ?></p>
                 <div class="hero-cta">
@@ -108,7 +116,7 @@ $heroSplitHasCustomHeight = $heroSplitHeight > 0;
     <?php elseif ($heroModeEffective === 'image_background' && $heroImage !== ''): ?>
         <img class="hero-bg-image" src="<?= e($heroImage) ?>" alt="<?= e($meta['headline'] ?? 'Imagem principal') ?>">
         <div class="hero-content reveal anim-<?= e($animationStyle) ?>" style="color: <?= e($heroTextColor) ?>;">
-            <p class="overline">Apresentacao profissional</p>
+            <?php if ($heroOverline !== ''): ?><p class="overline"><?= e($heroOverline) ?></p><?php endif; ?>
             <h1 style="font-family: <?= e($headlineFont) ?>; font-size: clamp(2rem, 6vw, <?= $headlineSize ?>px);"><?= e($meta['headline'] ?? '') ?></h1>
             <p style="font-family: <?= e($introFont) ?>; font-size: <?= $introSize ?>px;"><?= nl2br(e($meta['intro'] ?? '')) ?></p>
             <div class="hero-cta">
@@ -119,12 +127,12 @@ $heroSplitHasCustomHeight = $heroSplitHeight > 0;
             </div>
         </div>
     <?php elseif ($heroModeEffective === 'image_split' && $heroImage !== ''): ?>
-        <div class="split-wrap hero-split-wrap split-size-<?= e($heroSplitSizeEffective) ?> split-fit-<?= e($heroSplitFitEffective) ?> hero-split-<?= e($heroLayoutEffective) ?><?= $heroSplitHasCustomHeight ? ' has-custom-height' : '' ?> reveal anim-<?= e($animationStyle) ?>"<?= $heroSplitStyle !== '' ? ' style="' . e($heroSplitStyle) . '"' : '' ?>>
+        <div class="split-wrap hero-split-wrap split-size-<?= e($heroSplitSizeEffective) ?> split-fit-<?= e($heroSplitFitEffective) ?> hero-split-<?= e($heroLayoutEffective) ?><?= $heroSplitHasCustomWidth ? ' has-custom-width' : '' ?><?= $heroSplitHasCustomHeight ? ' has-custom-height' : '' ?> reveal anim-<?= e($animationStyle) ?>"<?= $heroSplitStyle !== '' ? ' style="' . e($heroSplitStyle) . '"' : '' ?>>
             <div class="split-media hero-split-media">
                 <img src="<?= e($heroImage) ?>" alt="<?= e($meta['headline'] ?? 'Imagem principal') ?>">
             </div>
             <div class="split-text hero-split-text" style="color: <?= e($heroTextColor) ?>;">
-                <p class="overline">Apresentacao profissional</p>
+                <?php if ($heroOverline !== ''): ?><p class="overline"><?= e($heroOverline) ?></p><?php endif; ?>
                 <h1 style="font-family: <?= e($headlineFont) ?>; font-size: clamp(2rem, 6vw, <?= $headlineSize ?>px);"><?= e($meta['headline'] ?? '') ?></h1>
                 <p style="font-family: <?= e($introFont) ?>; font-size: <?= $introSize ?>px;"><?= nl2br(e($meta['intro'] ?? '')) ?></p>
                 <div class="hero-cta">
@@ -137,7 +145,7 @@ $heroSplitHasCustomHeight = $heroSplitHeight > 0;
         </div>
     <?php else: ?>
         <div class="hero-content reveal anim-<?= e($animationStyle) ?>" style="color: <?= e($heroTextColor) ?>;">
-            <p class="overline">Apresentacao profissional</p>
+            <?php if ($heroOverline !== ''): ?><p class="overline"><?= e($heroOverline) ?></p><?php endif; ?>
             <h1 style="font-family: <?= e($headlineFont) ?>; font-size: clamp(2rem, 6vw, <?= $headlineSize ?>px);"><?= e($meta['headline'] ?? '') ?></h1>
             <p style="font-family: <?= e($introFont) ?>; font-size: <?= $introSize ?>px;"><?= nl2br(e($meta['intro'] ?? '')) ?></p>
             <div class="hero-cta">
@@ -156,6 +164,8 @@ $heroSplitHasCustomHeight = $heroSplitHeight > 0;
     $splitFit = (string)($section['split_fit'] ?? 'cover');
     $splitWidth = normalize_dimension_size($section['split_width'] ?? 0);
     $splitHeight = normalize_dimension_size($section['split_height'] ?? 0);
+    $splitHasCustomWidth = $splitWidth > 0;
+    $splitHasCustomHeight = $splitHeight > 0;
     $hasImage = !empty($section['background_image']);
     $hasSplitImage = !empty($section['split_image']);
     $sectionMode = (string)($section['section_mode'] ?? 'text');
@@ -242,6 +252,8 @@ $heroSplitHasCustomHeight = $heroSplitHeight > 0;
         $cardsTitle = 'Cards';
     }
     $cardsItemsRaw = $section['cards_items'] ?? [];
+    $cardsLimit = normalize_cards_limit($section['cards_limit'] ?? 6);
+    $cardsSpacing = normalize_cards_spacing($section['cards_spacing'] ?? 'spaced');
     $cardsStyle = trim((string)($section['cards_style'] ?? 'media'));
     if (!in_array($cardsStyle, ['media', 'text'], true)) {
         $cardsStyle = 'media';
@@ -273,7 +285,7 @@ $heroSplitHasCustomHeight = $heroSplitHeight > 0;
                 'button_text' => $cardButtonText,
                 'button_link' => $cardButtonLink,
             ];
-            if (count($cardsItems) >= 6) {
+            if (count($cardsItems) >= $cardsLimit) {
                 break;
             }
         }
@@ -318,7 +330,7 @@ $heroSplitHasCustomHeight = $heroSplitHeight > 0;
 <section id="<?= e($section['slug'] ?? '') ?>" class="content-block section-cards-block" style="background-color: <?= e($section['background_color'] ?? '#f5f6f8') ?>;">
     <div class="section-cards-wrap reveal anim-<?= e($effectiveSectionAnim) ?>">
         <h2 class="section-cards-title" style="font-family: <?= e($titleFontFamily) ?>; font-size: clamp(1.6rem, 3.3vw, <?= $titleSize ?>px);"><?= e($cardsTitle) ?></h2>
-        <div class="section-cards-grid">
+        <div class="section-cards-grid cards-spacing-<?= e($cardsSpacing) ?>">
             <?php foreach ($cardsItems as $cardItem): ?>
                 <article class="section-feature-card">
                     <?php if ($cardItem['image'] !== ''): ?>
@@ -408,7 +420,7 @@ $heroSplitHasCustomHeight = $heroSplitHeight > 0;
     </div>
 </section>
 <?php elseif (($layoutMode === 'split-left' || $layoutMode === 'split-right') && ($hasSplitImage || $isVideoSplit) || $isVideoSplit): ?>
-<section id="<?= e($section['slug'] ?? '') ?>" class="content-block split-layout <?= e($effectiveSplitLayout) ?> split-size-<?= e($splitSize) ?> split-fit-<?= e($splitFit) ?><?= $splitHeight > 0 ? ' has-custom-height' : '' ?>" style="<?= $splitSectionStyle ?>">
+<section id="<?= e($section['slug'] ?? '') ?>" class="content-block split-layout <?= e($effectiveSplitLayout) ?> split-size-<?= e($splitSize) ?> split-fit-<?= e($splitFit) ?><?= $splitHasCustomWidth ? ' has-custom-width' : '' ?><?= $splitHasCustomHeight ? ' has-custom-height' : '' ?>" style="<?= $splitSectionStyle ?>">
     <div class="split-wrap reveal anim-<?= e($effectiveSectionAnim) ?>">
         <div class="split-media">
             <?php if ($isVideoSplit): ?>
