@@ -255,6 +255,44 @@ function updateHeroFunctionGroups(formElement) {
   setHeroGroupVisibility(formElement, 'extras', true);
 }
 
+const linkedGalleryLimits = {
+  mosaic: { min: 2, max: 6 },
+  logos: { min: 2, max: 18 }
+};
+
+function updateLinkedGalleryLimit(formElement) {
+  if (!(formElement instanceof HTMLFormElement)) return;
+  const layoutSelect = formElement.querySelector('select.linked-gallery-layout[name="linked_images_layout"]');
+  const limitInput = formElement.querySelector('input.linked-gallery-limit[name="linked_images_limit"]');
+  if (!(layoutSelect instanceof HTMLSelectElement)) return;
+  if (!(limitInput instanceof HTMLInputElement)) return;
+
+  const layout = layoutSelect.value || 'mosaic';
+  const cfg = linkedGalleryLimits[layout] || linkedGalleryLimits.mosaic;
+  limitInput.min = String(cfg.min);
+  limitInput.max = String(cfg.max);
+
+  const value = Number(limitInput.value || 0);
+  if (!Number.isFinite(value) || value < cfg.min) {
+    limitInput.value = String(cfg.min);
+  } else if (value > cfg.max) {
+    limitInput.value = String(cfg.max);
+  }
+}
+
+function updateFrameBgGroups(formElement) {
+  if (!(formElement instanceof HTMLFormElement)) return;
+  const modeSelect = formElement.querySelector('select.frame-bg-mode[name="frame_bg_mode"]');
+  if (!(modeSelect instanceof HTMLSelectElement)) return;
+
+  const mode = modeSelect.value || 'default';
+  formElement.querySelectorAll('[data-frame-bg-group]').forEach((group) => {
+    const groupMode = (group.getAttribute('data-frame-bg-group') || '').trim();
+    const shouldShow = groupMode === mode;
+    group.classList.toggle('is-hidden', !shouldShow);
+  });
+}
+
 document.querySelectorAll('form').forEach((formElement) => {
   const functionSelect = formElement.querySelector('select[name="section_function"]');
   if (functionSelect instanceof HTMLSelectElement) {
@@ -290,5 +328,17 @@ document.querySelectorAll('form').forEach((formElement) => {
   if (heroImageVariantSelect instanceof HTMLSelectElement) {
     updateHeroFunctionGroups(formElement);
     heroImageVariantSelect.addEventListener('change', () => updateHeroFunctionGroups(formElement));
+  }
+
+  const linkedGalleryLayoutSelect = formElement.querySelector('select.linked-gallery-layout[name="linked_images_layout"]');
+  if (linkedGalleryLayoutSelect instanceof HTMLSelectElement) {
+    updateLinkedGalleryLimit(formElement);
+    linkedGalleryLayoutSelect.addEventListener('change', () => updateLinkedGalleryLimit(formElement));
+  }
+
+  const frameBgModeSelect = formElement.querySelector('select.frame-bg-mode[name="frame_bg_mode"]');
+  if (frameBgModeSelect instanceof HTMLSelectElement) {
+    updateFrameBgGroups(formElement);
+    frameBgModeSelect.addEventListener('change', () => updateFrameBgGroups(formElement));
   }
 });

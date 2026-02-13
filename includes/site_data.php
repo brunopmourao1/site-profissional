@@ -89,7 +89,12 @@ function default_site_data(): array
                 'contact_button_text' => 'Enviar',
                 'linked_images' => [],
                 'linked_images_limit' => 6,
-                'linked_images_layout' => 'boxed',
+                'linked_images_layout' => 'mosaic',
+                'carousel_limit' => 2,
+                'carousel_layout' => 'boxed',
+                'carousel_items' => [],
+                'frame_bg_mode' => 'default',
+                'frame_bg_color' => '#fffdfa',
                 'cards_title' => '',
                 'cards_style' => 'media',
                 'cards_spacing' => 'spaced',
@@ -133,7 +138,12 @@ function default_site_data(): array
                 'contact_button_text' => 'Enviar',
                 'linked_images' => [],
                 'linked_images_limit' => 6,
-                'linked_images_layout' => 'boxed',
+                'linked_images_layout' => 'mosaic',
+                'carousel_limit' => 2,
+                'carousel_layout' => 'boxed',
+                'carousel_items' => [],
+                'frame_bg_mode' => 'default',
+                'frame_bg_color' => '#fffdfa',
                 'cards_title' => '',
                 'cards_style' => 'media',
                 'cards_spacing' => 'spaced',
@@ -177,7 +187,12 @@ function default_site_data(): array
                 'contact_button_text' => 'Enviar',
                 'linked_images' => [],
                 'linked_images_limit' => 6,
-                'linked_images_layout' => 'boxed',
+                'linked_images_layout' => 'mosaic',
+                'carousel_limit' => 2,
+                'carousel_layout' => 'boxed',
+                'carousel_items' => [],
+                'frame_bg_mode' => 'default',
+                'frame_bg_color' => '#fffdfa',
                 'cards_title' => '',
                 'cards_style' => 'media',
                 'cards_spacing' => 'spaced',
@@ -221,7 +236,12 @@ function default_site_data(): array
                 'contact_button_text' => 'Enviar',
                 'linked_images' => [],
                 'linked_images_limit' => 6,
-                'linked_images_layout' => 'boxed',
+                'linked_images_layout' => 'mosaic',
+                'carousel_limit' => 2,
+                'carousel_layout' => 'boxed',
+                'carousel_items' => [],
+                'frame_bg_mode' => 'default',
+                'frame_bg_color' => '#fffdfa',
                 'cards_title' => '',
                 'cards_style' => 'media',
                 'cards_spacing' => 'spaced',
@@ -442,6 +462,8 @@ function load_site_data(): array
         if ($section['section_feature'] === '') {
             if (isset($section['linked_images']) && is_array($section['linked_images']) && count($section['linked_images']) > 0) {
                 $section['section_feature'] = 'linked_gallery';
+            } elseif (isset($section['carousel_items']) && is_array($section['carousel_items']) && count($section['carousel_items']) >= 2) {
+                $section['section_feature'] = 'carousel';
             } elseif (isset($section['cards_items']) && is_array($section['cards_items']) && count($section['cards_items']) > 0) {
                 $section['section_feature'] = 'cards';
             } elseif (!empty($section['contact_enabled'])) {
@@ -454,7 +476,7 @@ function load_site_data(): array
                 $section['section_feature'] = 'none';
             }
         }
-        if (!in_array($section['section_feature'], ['none', 'youtube', 'map', 'contact_form', 'linked_gallery', 'cards'], true)) {
+        if (!in_array($section['section_feature'], ['none', 'youtube', 'map', 'contact_form', 'linked_gallery', 'cards', 'carousel'], true)) {
             $section['section_feature'] = 'none';
         }
         if (!isset($section['section_function']) || !is_string($section['section_function'])) {
@@ -491,6 +513,7 @@ function load_site_data(): array
         if (!isset($section['map_embed_url']) || !is_string($section['map_embed_url'])) {
             $section['map_embed_url'] = '';
         }
+        $section['map_embed_url'] = google_maps_embed_url($section['map_embed_url']);
         if (!isset($section['contact_enabled'])) {
             $section['contact_enabled'] = false;
         }
@@ -516,13 +539,11 @@ function load_site_data(): array
         if (!isset($section['linked_images_limit']) || !is_numeric($section['linked_images_limit'])) {
             $section['linked_images_limit'] = 6;
         }
-        $section['linked_images_limit'] = normalize_linked_images_limit($section['linked_images_limit']);
         if (!isset($section['linked_images_layout']) || !is_string($section['linked_images_layout'])) {
-            $section['linked_images_layout'] = 'boxed';
+            $section['linked_images_layout'] = 'mosaic';
         }
-        if (!in_array($section['linked_images_layout'], ['boxed', 'direct'], true)) {
-            $section['linked_images_layout'] = 'boxed';
-        }
+        $section['linked_images_layout'] = normalize_linked_images_layout($section['linked_images_layout']);
+        $section['linked_images_limit'] = normalize_linked_images_limit_for_layout($section['linked_images_limit'], $section['linked_images_layout']);
         $normalizedLinkedImages = [];
         foreach ($section['linked_images'] as $linkedImage) {
             if (!is_array($linkedImage)) {
@@ -532,10 +553,7 @@ function load_site_data(): array
             if ($imagePath === '') {
                 continue;
             }
-            $linkedId = (int)($linkedImage['id'] ?? 0);
-            if ($linkedId <= 0) {
-                $linkedId = count($normalizedLinkedImages) + 1;
-            }
+            $linkedId = count($normalizedLinkedImages) + 1;
             $normalizedLinkedImages[] = [
                 'id' => $linkedId,
                 'image' => $imagePath,
@@ -543,8 +561,60 @@ function load_site_data(): array
                 'alt' => trim((string)($linkedImage['alt'] ?? '')),
                 'order' => count($normalizedLinkedImages) + 1,
             ];
+            if (count($normalizedLinkedImages) >= $section['linked_images_limit']) {
+                break;
+            }
         }
         $section['linked_images'] = $normalizedLinkedImages;
+
+        if (!isset($section['carousel_limit']) || !is_numeric($section['carousel_limit'])) {
+            $section['carousel_limit'] = 2;
+        }
+        $section['carousel_limit'] = normalize_carousel_limit($section['carousel_limit']);
+        if (!isset($section['carousel_layout']) || !is_string($section['carousel_layout'])) {
+            $section['carousel_layout'] = 'boxed';
+        }
+        $section['carousel_layout'] = normalize_carousel_layout($section['carousel_layout']);
+        if (!isset($section['frame_bg_mode']) || !is_string($section['frame_bg_mode'])) {
+            $section['frame_bg_mode'] = 'default';
+        }
+        $section['frame_bg_mode'] = normalize_frame_bg_mode($section['frame_bg_mode']);
+        if (!isset($section['frame_bg_color']) || !is_string($section['frame_bg_color'])) {
+            $section['frame_bg_color'] = '#fffdfa';
+        }
+        $section['frame_bg_color'] = normalize_hex_color($section['frame_bg_color'], '#fffdfa');
+        if (!isset($section['carousel_items']) || !is_array($section['carousel_items'])) {
+            $section['carousel_items'] = [];
+        }
+        $normalizedCarouselItems = [];
+        foreach ($section['carousel_items'] as $carouselItem) {
+            if (!is_array($carouselItem)) {
+                continue;
+            }
+            $itemId = (int)($carouselItem['id'] ?? 0);
+            if ($itemId < 1 || $itemId > 5) {
+                continue;
+            }
+            $itemSrc = trim((string)($carouselItem['src'] ?? ''));
+            if ($itemSrc === '') {
+                continue;
+            }
+            $itemType = trim((string)($carouselItem['type'] ?? ''));
+            if (!in_array($itemType, ['image', 'video'], true)) {
+                $ext = strtolower(pathinfo($itemSrc, PATHINFO_EXTENSION));
+                $itemType = in_array($ext, ['mp4', 'webm', 'ogg'], true) ? 'video' : 'image';
+            }
+            $normalizedCarouselItems[$itemId] = [
+                'id' => $itemId,
+                'type' => $itemType,
+                'src' => $itemSrc,
+                'link' => trim((string)($carouselItem['link'] ?? '')),
+                'alt' => trim((string)($carouselItem['alt'] ?? '')),
+                'order' => $itemId,
+            ];
+        }
+        ksort($normalizedCarouselItems);
+        $section['carousel_items'] = array_values($normalizedCarouselItems);
 
         if (!isset($section['cards_title']) || !is_string($section['cards_title'])) {
             $section['cards_title'] = '';
@@ -632,6 +702,11 @@ function load_site_data(): array
                 break;
             case 'linked_gallery':
                 $section['section_feature'] = 'linked_gallery';
+                $section['section_mode'] = 'text';
+                $section['layout_mode'] = 'background';
+                break;
+            case 'carousel':
+                $section['section_feature'] = 'carousel';
                 $section['section_mode'] = 'text';
                 $section['layout_mode'] = 'background';
                 break;
@@ -750,14 +825,89 @@ function normalize_brand_display(mixed $value): string
 function normalize_linked_images_limit(mixed $value): int
 {
     $limit = (int)$value;
-    if ($limit < 1) {
-        return 1;
+    if ($limit < 2) {
+        return 2;
     }
-    if ($limit > 30) {
-        return 30;
+    if ($limit > 18) {
+        return 18;
     }
 
     return $limit;
+}
+
+function normalize_linked_images_layout(mixed $value): string
+{
+    $layout = trim((string)$value);
+    if ($layout === 'boxed') {
+        $layout = 'mosaic';
+    } elseif ($layout === 'direct') {
+        $layout = 'logos';
+    }
+    if (!in_array($layout, ['mosaic', 'logos'], true)) {
+        return 'mosaic';
+    }
+
+    return $layout;
+}
+
+function normalize_linked_images_limit_for_layout(mixed $value, string $layout): int
+{
+    $limit = normalize_linked_images_limit($value);
+    $layout = normalize_linked_images_layout($layout);
+
+    if ($layout === 'mosaic' && $limit > 6) {
+        return 6;
+    }
+
+    return $limit;
+}
+
+function normalize_carousel_limit(mixed $value): int
+{
+    $limit = (int)$value;
+    if ($limit < 2) {
+        return 2;
+    }
+    if ($limit > 5) {
+        return 5;
+    }
+
+    return $limit;
+}
+
+function normalize_carousel_layout(mixed $value): string
+{
+    $layout = trim((string)$value);
+    if (!in_array($layout, ['boxed', 'full'], true)) {
+        return 'boxed';
+    }
+
+    return $layout;
+}
+
+function normalize_frame_bg_mode(mixed $value): string
+{
+    $mode = trim((string)$value);
+    if (!in_array($mode, ['default', 'section', 'custom'], true)) {
+        return 'default';
+    }
+
+    return $mode;
+}
+
+function normalize_hex_color(mixed $value, string $fallback): string
+{
+    $fallback = trim($fallback);
+    if (preg_match('/^#[0-9a-fA-F]{6}$/', $fallback) !== 1) {
+        $fallback = '#ffffff';
+    }
+
+    $color = trim((string)$value);
+    if (preg_match('/^#[0-9a-fA-F]{6}$/', $color) !== 1) {
+        return $fallback;
+    }
+
+    return strtolower($color);
 }
 
 function normalize_cards_limit(mixed $value): int
@@ -803,6 +953,7 @@ function normalize_section_function(mixed $value): string
         'cards_media',
         'cards_text',
         'linked_gallery',
+        'carousel',
         'youtube',
         'map',
         'contact_form',
@@ -826,6 +977,9 @@ function derive_section_function_from_section(array $section): string
     }
     if ($sectionFeature === 'linked_gallery') {
         return 'linked_gallery';
+    }
+    if ($sectionFeature === 'carousel') {
+        return 'carousel';
     }
     if ($sectionFeature === 'contact_form') {
         return 'contact_form';
@@ -887,6 +1041,78 @@ function youtube_embed_url(string $value): string
 
     if (preg_match('~^[A-Za-z0-9_-]{6,}$~', $value) === 1) {
         return 'https://www.youtube.com/embed/' . $value;
+    }
+
+    return '';
+}
+
+function google_maps_embed_url(string $value): string
+{
+    $value = trim($value);
+    if ($value === '') {
+        return '';
+    }
+
+    // Accept pasted iframe HTML and extract only the src URL.
+    if (stripos($value, '<iframe') !== false) {
+        if (preg_match('~\\ssrc\\s*=\\s*(["\\\'])(.*?)\\1~i', $value, $matches) === 1) {
+            $value = trim((string)$matches[2]);
+        }
+    }
+
+    $value = html_entity_decode($value, ENT_QUOTES, 'UTF-8');
+    $value = trim($value);
+
+    if (preg_match('~^https?://~i', $value) !== 1) {
+        return '';
+    }
+
+    $lower = strtolower($value);
+    if (strpos($lower, '/maps/embed') !== false || strpos($lower, '/maps/d/embed') !== false) {
+        return $value;
+    }
+
+    // A short share link (maps.app.goo.gl) is not embeddable as-is.
+    $host = (string)parse_url($value, PHP_URL_HOST);
+    if ($host !== '' && stripos($host, 'maps.app.goo.gl') !== false) {
+        return '';
+    }
+
+    $query = (string)parse_url($value, PHP_URL_QUERY);
+    $path = (string)parse_url($value, PHP_URL_PATH);
+
+    $params = [];
+    if ($query !== '') {
+        parse_str($query, $params);
+    }
+    if (isset($params['output']) && is_string($params['output']) && strtolower($params['output']) === 'embed') {
+        return $value;
+    }
+
+    // Try to extract coordinates from common Google Maps URLs.
+    if (preg_match('~@(-?\\d+(?:\\.\\d+)?),(-?\\d+(?:\\.\\d+)?)~', $value, $matches) === 1) {
+        $lat = $matches[1];
+        $lng = $matches[2];
+        return 'https://www.google.com/maps?q=' . rawurlencode($lat . ',' . $lng) . '&output=embed';
+    }
+    if (preg_match('~!3d(-?\\d+(?:\\.\\d+)?)!4d(-?\\d+(?:\\.\\d+)?)~', $value, $matches) === 1) {
+        $lat = $matches[1];
+        $lng = $matches[2];
+        return 'https://www.google.com/maps?q=' . rawurlencode($lat . ',' . $lng) . '&output=embed';
+    }
+
+    // If user pasted a "maps?q=..." URL, convert it to output=embed.
+    if (isset($params['q']) && is_string($params['q']) && trim($params['q']) !== '') {
+        return 'https://www.google.com/maps?q=' . rawurlencode(trim($params['q'])) . '&output=embed';
+    }
+
+    // Best-effort: /maps/place/<name> -> q=<name>
+    if ($path !== '' && preg_match('~/maps/place/([^/]+)~', $path, $matches) === 1) {
+        $place = urldecode((string)$matches[1]);
+        $place = trim($place);
+        if ($place !== '') {
+            return 'https://www.google.com/maps?q=' . rawurlencode($place) . '&output=embed';
+        }
     }
 
     return '';

@@ -181,12 +181,25 @@ $heroSplitHasCustomHeight = $heroSplitHeight > 0;
     $fontFamily = resolve_font_family((string)($section['text_font'] ?? 'manrope'));
     $fontSize = normalize_text_size($section['text_size'] ?? 18);
     $textColor = (string)($section['text_color'] ?? '#102133');
+    $frameBgMode = normalize_frame_bg_mode($section['frame_bg_mode'] ?? 'default');
+    $frameBgColor = normalize_hex_color($section['frame_bg_color'] ?? '#fffdfa', '#fffdfa');
+    $frameBgValue = '';
+    if ($frameBgMode === 'section') {
+        $frameBgValue = normalize_hex_color($section['background_color'] ?? '#ffffff', '#ffffff');
+    } elseif ($frameBgMode === 'custom') {
+        $frameBgValue = $frameBgColor;
+    }
+    $frameVars = $frameBgValue !== ''
+        ? '--frame-bg:' . $frameBgValue . ';--subframe-bg:' . $frameBgValue . ';'
+        : '';
     $youtubeEmbedUrl = youtube_embed_url((string)($section['youtube_url'] ?? ''));
     $mapEmbedUrl = trim((string)($section['map_embed_url'] ?? ''));
     $sectionFeature = (string)($section['section_feature'] ?? '');
-    if (!in_array($sectionFeature, ['none', 'youtube', 'map', 'contact_form', 'linked_gallery', 'cards'], true)) {
+    if (!in_array($sectionFeature, ['none', 'youtube', 'map', 'contact_form', 'linked_gallery', 'cards', 'carousel'], true)) {
         if (!empty($section['linked_images']) && is_array($section['linked_images'])) {
             $sectionFeature = 'linked_gallery';
+        } elseif (!empty($section['carousel_items']) && is_array($section['carousel_items']) && count($section['carousel_items']) >= 2) {
+            $sectionFeature = 'carousel';
         } elseif (!empty($section['cards_items']) && is_array($section['cards_items'])) {
             $sectionFeature = 'cards';
         } elseif (!empty($section['contact_enabled'])) {
@@ -215,6 +228,8 @@ $heroSplitHasCustomHeight = $heroSplitHeight > 0;
     $showYouTube = $sectionFeature === 'youtube' && $youtubeEmbedUrl !== '';
     $showMap = $sectionFeature === 'map' && $mapEmbedUrl !== '';
     $showContactForm = $sectionFeature === 'contact_form' && $contactDestination !== '';
+    $linkedImagesLayout = normalize_linked_images_layout($section['linked_images_layout'] ?? 'mosaic');
+    $linkedImagesLimit = normalize_linked_images_limit_for_layout($section['linked_images_limit'] ?? 6, $linkedImagesLayout);
     $linkedImagesRaw = $section['linked_images'] ?? [];
     $linkedImages = [];
     if (is_array($linkedImagesRaw)) {
@@ -236,14 +251,57 @@ $heroSplitHasCustomHeight = $heroSplitHeight > 0;
                 'link' => $linkedImageLink,
                 'alt' => $linkedImageAlt,
             ];
+            if (count($linkedImages) >= $linkedImagesLimit) {
+                break;
+            }
         }
     }
-    $showLinkedGallery = $sectionFeature === 'linked_gallery' && count($linkedImages) > 0;
-    $linkedImagesLayout = (string)($section['linked_images_layout'] ?? 'boxed');
-    if (!in_array($linkedImagesLayout, ['boxed', 'direct'], true)) {
-        $linkedImagesLayout = 'boxed';
+    $showLinkedGallery = $sectionFeature === 'linked_gallery' && count($linkedImages) >= 2;
+    $showMosaicLinkedGallery = $showLinkedGallery && $linkedImagesLayout === 'mosaic';
+    $showLogosLinkedGallery = $showLinkedGallery && $linkedImagesLayout === 'logos';
+
+    $carouselLimit = normalize_carousel_limit($section['carousel_limit'] ?? 2);
+    $carouselLayout = normalize_carousel_layout($section['carousel_layout'] ?? 'boxed');
+    $carouselRaw = $section['carousel_items'] ?? [];
+    $carouselItemsById = [];
+    if (is_array($carouselRaw)) {
+        foreach ($carouselRaw as $carouselItem) {
+            if (!is_array($carouselItem)) {
+                continue;
+            }
+            $carouselId = (int)($carouselItem['id'] ?? 0);
+            if ($carouselId < 1 || $carouselId > 5) {
+                continue;
+            }
+            if ($carouselId > $carouselLimit) {
+                continue;
+            }
+            $carouselSrc = trim((string)($carouselItem['src'] ?? ''));
+            if ($carouselSrc === '') {
+                continue;
+            }
+            $carouselType = trim((string)($carouselItem['type'] ?? ''));
+            if (!in_array($carouselType, ['image', 'video'], true)) {
+                $ext = strtolower(pathinfo($carouselSrc, PATHINFO_EXTENSION));
+                $carouselType = in_array($ext, ['mp4', 'webm', 'ogg'], true) ? 'video' : 'image';
+            }
+            $carouselLink = trim((string)($carouselItem['link'] ?? ''));
+            $carouselAlt = trim((string)($carouselItem['alt'] ?? ''));
+            if ($carouselAlt === '') {
+                $carouselAlt = 'Midia do carousel de ' . ((string)($section['title'] ?? 'Secao'));
+            }
+            $carouselItemsById[$carouselId] = [
+                'type' => $carouselType,
+                'src' => $carouselSrc,
+                'link' => $carouselLink,
+                'alt' => $carouselAlt,
+            ];
+        }
     }
-    $showDirectLinkedGallery = $showLinkedGallery && $linkedImagesLayout === 'direct';
+    ksort($carouselItemsById);
+    $carouselItems = array_values($carouselItemsById);
+    $showCarousel = $sectionFeature === 'carousel' && count($carouselItems) >= 2;
+
     $cardsTitle = trim((string)($section['cards_title'] ?? ''));
     if ($cardsTitle === '') {
         $cardsTitle = trim((string)($section['title'] ?? ''));
@@ -295,6 +353,9 @@ $heroSplitHasCustomHeight = $heroSplitHeight > 0;
     $style = $hasImage
         ? "background-image: linear-gradient(rgba(0,0,0,.45), rgba(0,0,0,.45)), url('" . e($section['background_image']) . "');"
         : "background-color: " . e($section['background_color'] ?? '#ffffff') . ";";
+    $mosaicStyle = $hasImage
+        ? "background-image: url('" . e($section['background_image']) . "'); background-size: cover; background-position: center;"
+        : "background-color: " . e($section['background_color'] ?? '#ffffff') . ";";
     $directStyle = $hasImage
         ? "background-image: linear-gradient(rgba(7,10,14,.68), rgba(7,10,14,.68)), url('" . e($section['background_image']) . "'); background-size: cover; background-position: center;"
         : "background: linear-gradient(120deg, #10151d, #151b23 54%, #0c1118);";
@@ -307,10 +368,36 @@ $heroSplitHasCustomHeight = $heroSplitHeight > 0;
     }
     $splitSectionStyle = 'background-color: ' . e($section['background_color'] ?? '#ffffff') . ';' . $splitStyleVars;
 ?>
-<?php if ($showDirectLinkedGallery): ?>
-<section id="<?= e($section['slug'] ?? '') ?>" class="content-block section-gallery-direct" style="<?= $directStyle ?>">
+<?php if ($showMosaicLinkedGallery): ?>
+<section id="<?= e($section['slug'] ?? '') ?>" class="content-block section-gallery-mosaic mosaic-count-<?= count($linkedImages) ?>" style="<?= $mosaicStyle ?><?= $frameVars ?>">
+    <div class="section-gallery-mosaic-grid reveal anim-<?= e($effectiveSectionAnim) ?>">
+        <?php foreach ($linkedImages as $linkedImage): ?>
+            <?php if ($linkedImage['link'] !== ''): ?>
+                <a class="mosaic-item" href="<?= e($linkedImage['link']) ?>" target="_blank" rel="noopener">
+                    <img src="<?= e($linkedImage['image']) ?>" alt="<?= e($linkedImage['alt']) ?>" loading="lazy">
+                    <span class="mosaic-overlay" aria-hidden="true"><span class="mosaic-btn">Acessar</span></span>
+                </a>
+            <?php else: ?>
+                <div class="mosaic-item is-static">
+                    <img src="<?= e($linkedImage['image']) ?>" alt="<?= e($linkedImage['alt']) ?>" loading="lazy">
+                </div>
+            <?php endif; ?>
+        <?php endforeach; ?>
+    </div>
+</section>
+<?php elseif ($showLogosLinkedGallery): ?>
+<section id="<?= e($section['slug'] ?? '') ?>" class="content-block section-gallery-direct" style="<?= $directStyle ?><?= $frameVars ?>color: <?= e($textColor) ?>;">
     <div class="section-gallery-direct-inner reveal anim-<?= e($effectiveSectionAnim) ?>">
         <h2 class="section-gallery-direct-title" style="font-family: <?= e($titleFontFamily) ?>; font-size: clamp(1.6rem, 3.3vw, <?= $titleSize ?>px);"><?= e($section['title'] ?? 'Secao') ?></h2>
+        <?php if (trim(strip_tags($contentRaw)) !== ''): ?>
+            <div class="section-gallery-direct-desc" style="font-family: <?= e($fontFamily) ?>; font-size: <?= $fontSize ?>px;">
+                <?php if (strip_tags($contentRaw) === $contentRaw): ?>
+                    <p><?= nl2br(e($contentRaw)) ?></p>
+                <?php else: ?>
+                    <?= sanitize_rich_text($contentRaw) ?>
+                <?php endif; ?>
+            </div>
+        <?php endif; ?>
         <div class="section-linked-gallery section-linked-gallery-direct">
             <?php foreach ($linkedImages as $linkedImage): ?>
                 <?php if ($linkedImage['link'] !== ''): ?>
@@ -327,8 +414,8 @@ $heroSplitHasCustomHeight = $heroSplitHeight > 0;
     </div>
 </section>
 <?php elseif ($showCards): ?>
-<section id="<?= e($section['slug'] ?? '') ?>" class="content-block section-cards-block" style="background-color: <?= e($section['background_color'] ?? '#f5f6f8') ?>;">
-    <div class="section-cards-wrap reveal anim-<?= e($effectiveSectionAnim) ?>">
+<section id="<?= e($section['slug'] ?? '') ?>" class="content-block section-cards-block" style="background-color: <?= e($section['background_color'] ?? '#f5f6f8') ?>;<?= $frameVars ?>color: <?= e($textColor) ?>;">
+    <div class="section-cards-wrap reveal anim-<?= e($effectiveSectionAnim) ?>" style="font-family: <?= e($fontFamily) ?>; font-size: <?= $fontSize ?>px;">
         <h2 class="section-cards-title" style="font-family: <?= e($titleFontFamily) ?>; font-size: clamp(1.6rem, 3.3vw, <?= $titleSize ?>px);"><?= e($cardsTitle) ?></h2>
         <div class="section-cards-grid cards-spacing-<?= e($cardsSpacing) ?>">
             <?php foreach ($cardsItems as $cardItem): ?>
@@ -340,7 +427,7 @@ $heroSplitHasCustomHeight = $heroSplitHeight > 0;
                     <?php endif; ?>
                     <div class="section-feature-card-body">
                         <?php if ($cardItem['title'] !== ''): ?>
-                            <h3><?= e($cardItem['title']) ?></h3>
+                            <h3 style="font-family: <?= e($titleFontFamily) ?>;"><?= e($cardItem['title']) ?></h3>
                         <?php endif; ?>
                         <?php if ($cardItem['text'] !== ''): ?>
                             <p><?= nl2br(e($cardItem['text'])) ?></p>
@@ -354,16 +441,112 @@ $heroSplitHasCustomHeight = $heroSplitHeight > 0;
         </div>
     </div>
 </section>
+<?php elseif ($showCarousel && $carouselLayout === 'full'): ?>
+<section id="<?= e($section['slug'] ?? '') ?>" class="content-block section-carousel-full" style="background-color: <?= e($section['background_color'] ?? '#ffffff') ?>;<?= $frameVars ?>">
+    <div class="carousel carousel-full reveal anim-<?= e($effectiveSectionAnim) ?>" data-carousel="true">
+        <div class="carousel-viewport">
+            <button type="button" class="carousel-nav carousel-prev" aria-label="Slide anterior">
+                <span aria-hidden="true">&lsaquo;</span>
+            </button>
+            <div class="carousel-track">
+                <?php foreach ($carouselItems as $carouselIndex => $carouselItem): ?>
+                    <?php
+                    $carouselType = (string)($carouselItem['type'] ?? 'image');
+                    $carouselSrc = (string)($carouselItem['src'] ?? '');
+                    $carouselLink = (string)($carouselItem['link'] ?? '');
+                    $carouselAlt = (string)($carouselItem['alt'] ?? '');
+                    ?>
+                    <div class="carousel-slide" data-slide-index="<?= (int)$carouselIndex ?>">
+                        <div class="carousel-media">
+                            <?php if ($carouselType === 'video'): ?>
+                                <video class="carousel-video" src="<?= e($carouselSrc) ?>" autoplay muted loop playsinline preload="metadata" disablepictureinpicture noremoteplayback></video>
+                            <?php else: ?>
+                                <img src="<?= e($carouselSrc) ?>" alt="<?= e($carouselAlt !== '' ? $carouselAlt : 'Imagem do carousel') ?>" loading="lazy">
+                            <?php endif; ?>
+                            <?php if ($carouselLink !== ''): ?>
+                                <a class="carousel-slide-link" href="<?= e($carouselLink) ?>" target="_blank" rel="noopener">
+                                    <span class="carousel-link-overlay" aria-hidden="true"><span class="carousel-link-btn">Acessar</span></span>
+                                </a>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+                <?php endforeach; ?>
+            </div>
+            <button type="button" class="carousel-nav carousel-next" aria-label="Proximo slide">
+                <span aria-hidden="true">&rsaquo;</span>
+            </button>
+        </div>
+        <div class="carousel-dots" role="tablist" aria-label="Navegacao do carousel">
+            <?php foreach ($carouselItems as $carouselIndex => $carouselItem): ?>
+                <button type="button" class="carousel-dot" data-slide-index="<?= (int)$carouselIndex ?>" aria-label="Ir para o slide <?= (int)$carouselIndex + 1 ?>"></button>
+            <?php endforeach; ?>
+        </div>
+    </div>
+</section>
+<?php elseif ($showCarousel): ?>
+<section id="<?= e($section['slug'] ?? '') ?>" class="content-block section-carousel-block<?= $hasImage ? ' image-bg' : '' ?>" style="<?= $style ?><?= $frameVars ?>">
+    <div class="section-carousel-wrap reveal anim-<?= e($effectiveSectionAnim) ?>" style="color: <?= e($textColor) ?>; font-family: <?= e($fontFamily) ?>; font-size: <?= $fontSize ?>px;">
+        <h2 class="section-carousel-title" style="font-family: <?= e($titleFontFamily) ?>; font-size: clamp(1.6rem, 3.3vw, <?= $titleSize ?>px);"><?= e($section['title'] ?? 'Secao') ?></h2>
+        <?php if (trim(strip_tags($contentRaw)) !== ''): ?>
+            <div class="section-carousel-desc" style="font-family: <?= e($fontFamily) ?>; font-size: <?= $fontSize ?>px;">
+                <?php if (strip_tags($contentRaw) === $contentRaw): ?>
+                    <p><?= nl2br(e($contentRaw)) ?></p>
+                <?php else: ?>
+                    <?= sanitize_rich_text($contentRaw) ?>
+                <?php endif; ?>
+            </div>
+        <?php endif; ?>
+        <div class="carousel" data-carousel="true">
+            <div class="carousel-viewport">
+                <button type="button" class="carousel-nav carousel-prev" aria-label="Slide anterior">
+                    <span aria-hidden="true">&lsaquo;</span>
+                </button>
+                <div class="carousel-track">
+                    <?php foreach ($carouselItems as $carouselIndex => $carouselItem): ?>
+                        <?php
+                        $carouselType = (string)($carouselItem['type'] ?? 'image');
+                        $carouselSrc = (string)($carouselItem['src'] ?? '');
+                        $carouselLink = (string)($carouselItem['link'] ?? '');
+                        $carouselAlt = (string)($carouselItem['alt'] ?? '');
+                        ?>
+                        <div class="carousel-slide" data-slide-index="<?= (int)$carouselIndex ?>">
+                            <div class="carousel-media">
+                                <?php if ($carouselType === 'video'): ?>
+                                    <video class="carousel-video" src="<?= e($carouselSrc) ?>" autoplay muted loop playsinline preload="metadata" disablepictureinpicture noremoteplayback></video>
+                                <?php else: ?>
+                                    <img src="<?= e($carouselSrc) ?>" alt="<?= e($carouselAlt !== '' ? $carouselAlt : 'Imagem do carousel') ?>" loading="lazy">
+                                <?php endif; ?>
+                                <?php if ($carouselLink !== ''): ?>
+                                    <a class="carousel-slide-link" href="<?= e($carouselLink) ?>" target="_blank" rel="noopener">
+                                        <span class="carousel-link-overlay" aria-hidden="true"><span class="carousel-link-btn">Acessar</span></span>
+                                    </a>
+                                <?php endif; ?>
+                            </div>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+                <button type="button" class="carousel-nav carousel-next" aria-label="Proximo slide">
+                    <span aria-hidden="true">&rsaquo;</span>
+                </button>
+            </div>
+            <div class="carousel-dots" role="tablist" aria-label="Navegacao do carousel">
+                <?php foreach ($carouselItems as $carouselIndex => $carouselItem): ?>
+                    <button type="button" class="carousel-dot" data-slide-index="<?= (int)$carouselIndex ?>" aria-label="Ir para o slide <?= (int)$carouselIndex + 1 ?>"></button>
+                <?php endforeach; ?>
+            </div>
+        </div>
+    </div>
+</section>
 <?php elseif ($isVideoFull): ?>
-<section id="<?= e($section['slug'] ?? '') ?>" class="content-block section-video-full" style="background-color: <?= e($section['background_color'] ?? '#ffffff') ?>;">
+<section id="<?= e($section['slug'] ?? '') ?>" class="content-block section-video-full" style="background-color: <?= e($section['background_color'] ?? '#ffffff') ?>;<?= $frameVars ?>">
     <div class="section-video-full-wrap reveal anim-<?= e($effectiveSectionAnim) ?>">
         <video class="section-video-full-media" src="<?= e($sectionVideo) ?>" autoplay muted loop playsinline preload="metadata" disablepictureinpicture noremoteplayback></video>
     </div>
 </section>
 <?php elseif ($isVideoBackground): ?>
-<section id="<?= e($section['slug'] ?? '') ?>" class="content-block section-video-background" style="background-color: <?= e($section['background_color'] ?? '#ffffff') ?>;">
+<section id="<?= e($section['slug'] ?? '') ?>" class="content-block section-video-background" style="background-color: <?= e($section['background_color'] ?? '#ffffff') ?>;<?= $frameVars ?>">
     <video class="section-bg-video" src="<?= e($sectionVideo) ?>" autoplay muted loop playsinline preload="metadata" disablepictureinpicture noremoteplayback></video>
-    <div class="overlay-content reveal anim-<?= e($effectiveSectionAnim) ?>" style="color: <?= e($textColor) ?>;">
+    <div class="overlay-content reveal anim-<?= e($effectiveSectionAnim) ?>" style="color: <?= e($textColor) ?>; font-family: <?= e($fontFamily) ?>; font-size: <?= $fontSize ?>px;">
         <h2 style="font-family: <?= e($titleFontFamily) ?>; font-size: clamp(1.6rem, 3.3vw, <?= $titleSize ?>px);"><?= e($section['title'] ?? 'Secao') ?></h2>
         <div class="section-rich-text" style="font-family: <?= e($fontFamily) ?>; font-size: <?= $fontSize ?>px;">
             <?php if (strip_tags($contentRaw) === $contentRaw): ?>
@@ -399,7 +582,7 @@ $heroSplitHasCustomHeight = $heroSplitHeight > 0;
         <?php endif; ?>
         <?php if ($showContactForm): ?>
             <div class="section-contact-box">
-                <h3><?= e($contactFormTitle) ?></h3>
+                <h3 style="font-family: <?= e($titleFontFamily) ?>;"><?= e($contactFormTitle) ?></h3>
                 <form class="section-contact-form js-mailto-form" action="mailto:<?= e($contactDestination) ?>" method="post" enctype="text/plain" data-destination="<?= e($contactDestination) ?>" data-section-title="<?= e($section['title'] ?? 'Contato') ?>">
                     <label>Nome
                         <input type="text" name="name" required>
@@ -420,7 +603,7 @@ $heroSplitHasCustomHeight = $heroSplitHeight > 0;
     </div>
 </section>
 <?php elseif (($layoutMode === 'split-left' || $layoutMode === 'split-right') && ($hasSplitImage || $isVideoSplit) || $isVideoSplit): ?>
-<section id="<?= e($section['slug'] ?? '') ?>" class="content-block split-layout <?= e($effectiveSplitLayout) ?> split-size-<?= e($splitSize) ?> split-fit-<?= e($splitFit) ?><?= $splitHasCustomWidth ? ' has-custom-width' : '' ?><?= $splitHasCustomHeight ? ' has-custom-height' : '' ?>" style="<?= $splitSectionStyle ?>">
+<section id="<?= e($section['slug'] ?? '') ?>" class="content-block split-layout <?= e($effectiveSplitLayout) ?> split-size-<?= e($splitSize) ?> split-fit-<?= e($splitFit) ?><?= $splitHasCustomWidth ? ' has-custom-width' : '' ?><?= $splitHasCustomHeight ? ' has-custom-height' : '' ?>" style="<?= $splitSectionStyle ?><?= $frameVars ?>">
     <div class="split-wrap reveal anim-<?= e($effectiveSectionAnim) ?>">
         <div class="split-media">
             <?php if ($isVideoSplit): ?>
@@ -429,7 +612,7 @@ $heroSplitHasCustomHeight = $heroSplitHeight > 0;
                 <img src="<?= e($section['split_image']) ?>" alt="Imagem da secao <?= e($section['title'] ?? 'Secao') ?>">
             <?php endif; ?>
         </div>
-        <div class="split-text overlay-content" style="color: <?= e($textColor) ?>;">
+        <div class="split-text overlay-content" style="color: <?= e($textColor) ?>; font-family: <?= e($fontFamily) ?>; font-size: <?= $fontSize ?>px;">
             <h2 style="font-family: <?= e($titleFontFamily) ?>; font-size: clamp(1.6rem, 3.3vw, <?= $titleSize ?>px);"><?= e($section['title'] ?? 'Secao') ?></h2>
             <div class="section-rich-text" style="font-family: <?= e($fontFamily) ?>; font-size: <?= $fontSize ?>px;">
                 <?php if (strip_tags($contentRaw) === $contentRaw): ?>
@@ -465,7 +648,7 @@ $heroSplitHasCustomHeight = $heroSplitHeight > 0;
             <?php endif; ?>
             <?php if ($showContactForm): ?>
                 <div class="section-contact-box">
-                    <h3><?= e($contactFormTitle) ?></h3>
+                    <h3 style="font-family: <?= e($titleFontFamily) ?>;"><?= e($contactFormTitle) ?></h3>
                     <form class="section-contact-form js-mailto-form" action="mailto:<?= e($contactDestination) ?>" method="post" enctype="text/plain" data-destination="<?= e($contactDestination) ?>" data-section-title="<?= e($section['title'] ?? 'Contato') ?>">
                         <label>Nome
                             <input type="text" name="name" required>
@@ -487,8 +670,8 @@ $heroSplitHasCustomHeight = $heroSplitHeight > 0;
     </div>
 </section>
 <?php else: ?>
-<section id="<?= e($section['slug'] ?? '') ?>" class="content-block<?= $hasImage ? ' image-bg' : '' ?>" style="<?= $style ?>">
-    <div class="overlay-content reveal anim-<?= e($effectiveSectionAnim) ?>" style="color: <?= e($textColor) ?>;">
+<section id="<?= e($section['slug'] ?? '') ?>" class="content-block<?= $hasImage ? ' image-bg' : '' ?>" style="<?= $style ?><?= $frameVars ?>">
+    <div class="overlay-content reveal anim-<?= e($effectiveSectionAnim) ?>" style="color: <?= e($textColor) ?>; font-family: <?= e($fontFamily) ?>; font-size: <?= $fontSize ?>px;">
         <h2 style="font-family: <?= e($titleFontFamily) ?>; font-size: clamp(1.6rem, 3.3vw, <?= $titleSize ?>px);"><?= e($section['title'] ?? 'Secao') ?></h2>
         <div class="section-rich-text" style="font-family: <?= e($fontFamily) ?>; font-size: <?= $fontSize ?>px;">
             <?php if (strip_tags($contentRaw) === $contentRaw): ?>
@@ -524,7 +707,7 @@ $heroSplitHasCustomHeight = $heroSplitHeight > 0;
         <?php endif; ?>
         <?php if ($showContactForm): ?>
             <div class="section-contact-box">
-                <h3><?= e($contactFormTitle) ?></h3>
+                <h3 style="font-family: <?= e($titleFontFamily) ?>;"><?= e($contactFormTitle) ?></h3>
                 <form class="section-contact-form js-mailto-form" action="mailto:<?= e($contactDestination) ?>" method="post" enctype="text/plain" data-destination="<?= e($contactDestination) ?>" data-section-title="<?= e($section['title'] ?? 'Contato') ?>">
                     <label>Nome
                         <input type="text" name="name" required>

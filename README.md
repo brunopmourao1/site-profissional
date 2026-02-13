@@ -24,12 +24,16 @@ No primeiro login bem-sucedido, a senha passa a ser armazenada com hash.
 
 ## O que pode editar no dashboard
 - Dados da empresa (nome, titulo, intro, telefone, email, endereco, whatsapp)
+- Exibicao da marca no topo: somente nome, somente logo ou ambos
 - Cores principais do site
 - Criacao de novas abas (secao)
 - Ordem das abas no menu
 - Conteudo, slug e nome do menu de cada aba
 - Cor de fundo da aba
 - Upload/remocao de imagem de fundo por aba
+- Fundo dos quadros internos por aba (padrao / acompanhar cor / personalizado)
+- Fonte/tamanho/cor de titulos e textos por aba
+- Funcoes por aba (texto, midia lateral, midia de fundo, cards, galeria, YouTube, mapa, formulario, carousel)
 - Usuario e senha do painel
 
 ## Publicacao em hospedagem
@@ -54,9 +58,9 @@ No primeiro login bem-sucedido, a senha passa a ser armazenada com hash.
   - Fundo de aba: ate `3 MB`
 
 ## Documentacao de fluxo
-- Status completo desta fase: `docs/STATUS_E_BACKLOG_2026-02-11.md`
+- Status completo desta fase: `docs/STATUS_E_BACKLOG_2026-02-13.md`
 - Status rapido (raiz): `STATUS.md`
-- Handoff mais recente: `docs/HANDOFF_2026-02-11.md`
+- Handoff mais recente: `docs/HANDOFF_2026-02-13.md`
 - Status atual: `docs/STATUS_ATUAL.md`
 - Diario de projeto: `docs/DIARIO_DE_PROJETO.md`
 - Plano de testes: `docs/PLANO_DE_TESTES.md`

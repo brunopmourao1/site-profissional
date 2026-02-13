@@ -93,6 +93,8 @@ function resolve_section_mode_and_feature(string $sectionFunction, string $split
     } elseif ($sectionFunction === 'cards_text') {
         $sectionFeature = 'cards';
         $cardsStyle = 'text';
+    } elseif ($sectionFunction === 'carousel') {
+        $sectionFeature = 'carousel';
     } elseif (in_array($sectionFunction, ['linked_gallery', 'youtube', 'map', 'contact_form'], true)) {
         $sectionFeature = $sectionFunction;
     }
@@ -359,10 +361,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $splitMediaType = normalize_media_type($_POST['split_media_type'] ?? 'image');
         $backgroundMediaType = normalize_media_type($_POST['background_media_type'] ?? 'image');
         [$sectionMode, $sectionFeature, $cardsStyle] = resolve_section_mode_and_feature($sectionFunction, $splitMediaType, $backgroundMediaType);
-        $linkedImagesLayout = sanitize_text((string)($_POST['linked_images_layout'] ?? 'boxed'));
-        if (!in_array($linkedImagesLayout, ['boxed', 'direct'], true)) {
-            $linkedImagesLayout = 'boxed';
-        }
+        $linkedImagesLayout = normalize_linked_images_layout($_POST['linked_images_layout'] ?? 'mosaic');
         $layoutMode = sanitize_text((string)($_POST['layout_mode'] ?? 'background'));
         if (!in_array($layoutMode, ['background', 'split-left', 'split-right'], true)) {
             $layoutMode = 'background';
@@ -377,6 +376,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $youtubeEnabled = $sectionFeature === 'youtube';
         $mapEnabled = $sectionFeature === 'map';
         $contactEnabled = $sectionFeature === 'contact_form';
+
+        $rawMapEmbedUrl = (string)($_POST['map_embed_url'] ?? '');
+        $normalizedMapEmbedUrl = google_maps_embed_url($rawMapEmbedUrl);
+        if ($mapEnabled && trim($rawMapEmbedUrl) !== '' && $normalizedMapEmbedUrl === '') {
+            $error = 'Link de incorporacao do Google Maps invalido. Use o link do iframe (src) no formato /maps/embed ou um link com output=embed. Links curtos (maps.app.goo.gl) nao funcionam.';
+        }
 
         $data['sections'][] = [
             'id' => next_section_id($data['sections']),
@@ -404,14 +409,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'youtube_enabled' => $youtubeEnabled,
             'youtube_url' => sanitize_text((string)($_POST['youtube_url'] ?? '')),
             'map_enabled' => $mapEnabled,
-            'map_embed_url' => sanitize_text((string)($_POST['map_embed_url'] ?? '')),
+            'map_embed_url' => $normalizedMapEmbedUrl,
             'contact_enabled' => $contactEnabled,
             'contact_form_title' => sanitize_text((string)($_POST['contact_form_title'] ?? 'Envie sua mensagem')),
             'contact_destination_email' => sanitize_text((string)($_POST['contact_destination_email'] ?? '')),
             'contact_button_text' => sanitize_text((string)($_POST['contact_button_text'] ?? 'Enviar')),
             'linked_images' => [],
-            'linked_images_limit' => normalize_linked_images_limit($_POST['linked_images_limit'] ?? 6),
+            'linked_images_limit' => normalize_linked_images_limit_for_layout($_POST['linked_images_limit'] ?? 6, $linkedImagesLayout),
             'linked_images_layout' => $linkedImagesLayout,
+            'carousel_limit' => normalize_carousel_limit($_POST['carousel_limit'] ?? 2),
+            'carousel_layout' => normalize_carousel_layout($_POST['carousel_layout'] ?? 'boxed'),
+            'carousel_items' => [],
+            'frame_bg_mode' => normalize_frame_bg_mode($_POST['frame_bg_mode'] ?? 'default'),
+            'frame_bg_color' => normalize_hex_color($_POST['frame_bg_color'] ?? '#fffdfa', '#fffdfa'),
             'cards_title' => sanitize_text((string)($_POST['cards_title'] ?? '')),
             'cards_style' => $cardsStyle,
             'cards_spacing' => normalize_cards_spacing($_POST['cards_spacing'] ?? 'spaced'),
@@ -477,10 +487,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } else {
                 $layoutMode = 'background';
             }
-            $linkedImagesLayout = sanitize_text((string)($_POST['linked_images_layout'] ?? 'boxed'));
-            if (!in_array($linkedImagesLayout, ['boxed', 'direct'], true)) {
-                $linkedImagesLayout = 'boxed';
-            }
+            $linkedImagesLayout = normalize_linked_images_layout($_POST['linked_images_layout'] ?? 'mosaic');
             $data['sections'][$index]['layout_mode'] = $layoutMode;
             $data['sections'][$index]['split_size'] = $splitSize;
             $data['sections'][$index]['split_fit'] = $splitFit;
@@ -494,13 +501,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $data['sections'][$index]['youtube_enabled'] = $sectionFeature === 'youtube';
             $data['sections'][$index]['youtube_url'] = sanitize_text((string)($_POST['youtube_url'] ?? ''));
             $data['sections'][$index]['map_enabled'] = $sectionFeature === 'map';
-            $data['sections'][$index]['map_embed_url'] = sanitize_text((string)($_POST['map_embed_url'] ?? ''));
+            $rawMapEmbedUrl = (string)($_POST['map_embed_url'] ?? '');
+            $normalizedMapEmbedUrl = google_maps_embed_url($rawMapEmbedUrl);
+            if (($sectionFeature === 'map') && trim($rawMapEmbedUrl) !== '' && $normalizedMapEmbedUrl === '') {
+                $error = 'Link de incorporacao do Google Maps invalido. Use o link do iframe (src) no formato /maps/embed ou um link com output=embed. Links curtos (maps.app.goo.gl) nao funcionam.';
+                $normalizedMapEmbedUrl = (string)($data['sections'][$index]['map_embed_url'] ?? '');
+            }
+            $data['sections'][$index]['map_embed_url'] = $normalizedMapEmbedUrl;
             $data['sections'][$index]['contact_enabled'] = $sectionFeature === 'contact_form';
             $data['sections'][$index]['contact_form_title'] = sanitize_text((string)($_POST['contact_form_title'] ?? 'Envie sua mensagem'));
             $data['sections'][$index]['contact_destination_email'] = sanitize_text((string)($_POST['contact_destination_email'] ?? ''));
             $data['sections'][$index]['contact_button_text'] = sanitize_text((string)($_POST['contact_button_text'] ?? 'Enviar'));
-            $data['sections'][$index]['linked_images_limit'] = normalize_linked_images_limit($_POST['linked_images_limit'] ?? 6);
+            $data['sections'][$index]['linked_images_limit'] = normalize_linked_images_limit_for_layout($_POST['linked_images_limit'] ?? 6, $linkedImagesLayout);
             $data['sections'][$index]['linked_images_layout'] = $linkedImagesLayout;
+            $data['sections'][$index]['carousel_limit'] = normalize_carousel_limit($_POST['carousel_limit'] ?? ($data['sections'][$index]['carousel_limit'] ?? 2));
+            $data['sections'][$index]['carousel_layout'] = normalize_carousel_layout($_POST['carousel_layout'] ?? ($data['sections'][$index]['carousel_layout'] ?? 'boxed'));
+            $data['sections'][$index]['frame_bg_mode'] = normalize_frame_bg_mode($_POST['frame_bg_mode'] ?? ($data['sections'][$index]['frame_bg_mode'] ?? 'default'));
+            $data['sections'][$index]['frame_bg_color'] = normalize_hex_color($_POST['frame_bg_color'] ?? ($data['sections'][$index]['frame_bg_color'] ?? '#fffdfa'), '#fffdfa');
             $data['sections'][$index]['cards_title'] = sanitize_text((string)($_POST['cards_title'] ?? ''));
             $data['sections'][$index]['cards_style'] = $cardsStyle;
             $data['sections'][$index]['cards_spacing'] = normalize_cards_spacing($_POST['cards_spacing'] ?? 'spaced');
@@ -785,14 +802,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $updatedLinkedImages[] = $linkedItem;
             }
 
-            $linkedImagesLimit = normalize_linked_images_limit($data['sections'][$index]['linked_images_limit'] ?? 6);
+            $linkedImagesLayout = normalize_linked_images_layout($data['sections'][$index]['linked_images_layout'] ?? 'mosaic');
+            $linkedImagesLimit = normalize_linked_images_limit_for_layout($data['sections'][$index]['linked_images_limit'] ?? 6, $linkedImagesLayout);
             $newLinkedLinks = isset($_POST['linked_image_new_links']) && is_array($_POST['linked_image_new_links']) ? $_POST['linked_image_new_links'] : [];
             $newLinkedAlts = isset($_POST['linked_image_new_alts']) && is_array($_POST['linked_image_new_alts']) ? $_POST['linked_image_new_alts'] : [];
+            $newLinkedIds = isset($_POST['linked_image_new_ids']) && is_array($_POST['linked_image_new_ids']) ? $_POST['linked_image_new_ids'] : [];
             $newLinkedFiles = isset($_FILES['linked_image_new_files']) && is_array($_FILES['linked_image_new_files']) ? $_FILES['linked_image_new_files'] : null;
             $newLinkedFilesCount = is_array($newLinkedFiles) && isset($newLinkedFiles['name']) && is_array($newLinkedFiles['name']) ? count($newLinkedFiles['name']) : 0;
-            $newLinkedRowsCount = max(count($newLinkedLinks), count($newLinkedAlts), $newLinkedFilesCount);
+            $newLinkedRowsCount = max(count($newLinkedIds), count($newLinkedLinks), count($newLinkedAlts), $newLinkedFilesCount);
+
+            $usedLinkedIds = [];
+            foreach ($updatedLinkedImages as $linkedItem) {
+                if (!is_array($linkedItem)) {
+                    continue;
+                }
+                $existingId = (int)($linkedItem['id'] ?? 0);
+                if ($existingId > 0) {
+                    $usedLinkedIds[$existingId] = true;
+                }
+            }
 
             for ($newLinkedIndex = 0; $error === '' && $newLinkedIndex < $newLinkedRowsCount; $newLinkedIndex++) {
+                $desiredLinkedId = (int)($newLinkedIds[$newLinkedIndex] ?? 0);
+                if ($desiredLinkedId < 1 || $desiredLinkedId > $linkedImagesLimit) {
+                    $desiredLinkedId = 0;
+                }
                 $newLinkedLink = sanitize_text((string)($newLinkedLinks[$newLinkedIndex] ?? ''));
                 $newLinkedAlt = sanitize_text((string)($newLinkedAlts[$newLinkedIndex] ?? ''));
                 $newLinkedHasText = $newLinkedLink !== '' || $newLinkedAlt !== '';
@@ -823,6 +857,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     continue;
                 }
 
+                $newLinkedId = $desiredLinkedId;
+                if ($newLinkedId <= 0) {
+                    for ($candidateId = 1; $candidateId <= $linkedImagesLimit; $candidateId++) {
+                        if (!isset($usedLinkedIds[$candidateId])) {
+                            $newLinkedId = $candidateId;
+                            break;
+                        }
+                    }
+                }
+                if ($newLinkedId <= 0) {
+                    $error = 'Nao ha slots disponiveis para novas imagens nesta aba.';
+                    break;
+                }
+                if (isset($usedLinkedIds[$newLinkedId])) {
+                    $error = 'O slot da nova imagem #' . $newLinkedId . ' ja esta ocupado. Remova a imagem existente antes de substituir.';
+                    break;
+                }
+
                 $tmpName = is_array($newLinkedFiles) && isset($newLinkedFiles['tmp_name']) && is_array($newLinkedFiles['tmp_name'])
                     ? (string)($newLinkedFiles['tmp_name'][$newLinkedIndex] ?? '')
                     : '';
@@ -841,17 +893,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     } elseif (!is_writable(UPLOADS_DIR)) {
                         $error = 'A pasta uploads/ nao tem permissao de escrita.';
                     } else {
-                        $maxLinkedImageId++;
-                        $filename = 'linked-' . $id . '-' . $maxLinkedImageId . '-' . time() . '-' . $newLinkedIndex . '.' . $ext;
+                        $maxLinkedImageId = max($maxLinkedImageId, $newLinkedId);
+                        $filename = 'linked-' . $id . '-' . $newLinkedId . '-' . time() . '-' . $newLinkedIndex . '.' . $ext;
                         $destination = UPLOADS_DIR . DIRECTORY_SEPARATOR . $filename;
                         if (move_uploaded_file($tmpName, $destination)) {
                             $updatedLinkedImages[] = [
-                                'id' => $maxLinkedImageId,
+                                'id' => $newLinkedId,
                                 'image' => UPLOADS_URL . '/' . $filename,
                                 'link' => $newLinkedLink,
                                 'alt' => $newLinkedAlt,
                                 'order' => count($updatedLinkedImages) + 1,
                             ];
+                            $usedLinkedIds[$newLinkedId] = true;
                         } else {
                             $error = 'Falha ao salvar nova imagem da galeria em uploads/.';
                         }
@@ -861,11 +914,249 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             }
 
+            usort($updatedLinkedImages, static fn (array $a, array $b): int => ((int)($a['id'] ?? 0)) <=> ((int)($b['id'] ?? 0)));
             foreach ($updatedLinkedImages as $updatedIndex => &$linkedImageItem) {
                 $linkedImageItem['order'] = $updatedIndex + 1;
             }
             unset($linkedImageItem);
-            $data['sections'][$index]['linked_images'] = $updatedLinkedImages;
+            $data['sections'][$index]['linked_images'] = array_slice($updatedLinkedImages, 0, $linkedImagesLimit);
+
+            $carouselCurrent = $data['sections'][$index]['carousel_items'] ?? [];
+            if (!is_array($carouselCurrent)) {
+                $carouselCurrent = [];
+            }
+            $carouselById = [];
+            foreach ($carouselCurrent as $carouselItem) {
+                if (!is_array($carouselItem)) {
+                    continue;
+                }
+                $carouselId = (int)($carouselItem['id'] ?? 0);
+                if ($carouselId < 1 || $carouselId > 5) {
+                    continue;
+                }
+                $carouselSrc = sanitize_text((string)($carouselItem['src'] ?? ''));
+                if ($carouselSrc === '') {
+                    continue;
+                }
+                $carouselType = sanitize_text((string)($carouselItem['type'] ?? ''));
+                if (!in_array($carouselType, ['image', 'video'], true)) {
+                    $ext = strtolower(pathinfo($carouselSrc, PATHINFO_EXTENSION));
+                    $carouselType = in_array($ext, ['mp4', 'webm', 'ogg'], true) ? 'video' : 'image';
+                }
+                $carouselById[$carouselId] = [
+                    'id' => $carouselId,
+                    'type' => $carouselType,
+                    'src' => $carouselSrc,
+                    'link' => sanitize_text((string)($carouselItem['link'] ?? '')),
+                    'alt' => sanitize_text((string)($carouselItem['alt'] ?? '')),
+                    'order' => $carouselId,
+                ];
+            }
+
+            $carouselLimit = normalize_carousel_limit($data['sections'][$index]['carousel_limit'] ?? 2);
+
+            $postedCarouselIds = isset($_POST['carousel_item_ids']) && is_array($_POST['carousel_item_ids']) ? $_POST['carousel_item_ids'] : [];
+            $postedCarouselLinks = isset($_POST['carousel_item_links']) && is_array($_POST['carousel_item_links']) ? $_POST['carousel_item_links'] : [];
+            $postedCarouselAlts = isset($_POST['carousel_item_alts']) && is_array($_POST['carousel_item_alts']) ? $_POST['carousel_item_alts'] : [];
+            $postedCarouselRemoveIds = isset($_POST['carousel_item_remove_ids']) && is_array($_POST['carousel_item_remove_ids']) ? $_POST['carousel_item_remove_ids'] : [];
+
+            $removeCarouselMap = [];
+            foreach ($postedCarouselRemoveIds as $removeCarouselId) {
+                $removeId = (int)$removeCarouselId;
+                if ($removeId > 0) {
+                    $removeCarouselMap[$removeId] = true;
+                }
+            }
+
+            $updatedCarouselById = [];
+            $touchedCarousel = [];
+            $removedCarousel = [];
+
+            foreach ($postedCarouselIds as $rowIndex => $postedCarouselId) {
+                $carouselId = (int)$postedCarouselId;
+                if ($carouselId <= 0 || !isset($carouselById[$carouselId])) {
+                    continue;
+                }
+
+                $touchedCarousel[$carouselId] = true;
+                $carouselItem = $carouselById[$carouselId];
+
+                if (isset($removeCarouselMap[$carouselId])) {
+                    $carouselLocalPath = ROOT_PATH . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, (string)$carouselItem['src']);
+                    if (is_file($carouselLocalPath)) {
+                        @unlink($carouselLocalPath);
+                    }
+                    $removedCarousel[$carouselId] = true;
+                    continue;
+                }
+
+                $carouselItem['link'] = sanitize_text((string)($postedCarouselLinks[$rowIndex] ?? ''));
+                $carouselItem['alt'] = sanitize_text((string)($postedCarouselAlts[$rowIndex] ?? ''));
+
+                if ($error === '' && isset($_FILES['carousel_item_files']) && is_array($_FILES['carousel_item_files'])) {
+                    $rowUploadError = (int)($_FILES['carousel_item_files']['error'][$rowIndex] ?? UPLOAD_ERR_NO_FILE);
+                    if ($rowUploadError !== UPLOAD_ERR_OK && $rowUploadError !== UPLOAD_ERR_NO_FILE) {
+                        $error = upload_error_message($rowUploadError);
+                    }
+
+                    if ($error === '' && $rowUploadError === UPLOAD_ERR_OK) {
+                        $tmpName = (string)($_FILES['carousel_item_files']['tmp_name'][$rowIndex] ?? '');
+                        $original = (string)($_FILES['carousel_item_files']['name'][$rowIndex] ?? '');
+                        $ext = strtolower(pathinfo($original, PATHINFO_EXTENSION));
+
+                        $allowedImages = ['jpg', 'jpeg', 'png', 'webp'];
+                        $allowedImageMime = ['image/jpeg', 'image/png', 'image/webp'];
+                        $allowedVideos = ['mp4', 'webm', 'ogg'];
+                        $allowedVideoMime = ['video/mp4', 'video/webm', 'video/ogg', 'video/x-m4v', 'application/mp4', 'application/octet-stream'];
+
+                        $isImage = in_array($ext, $allowedImages, true);
+                        $isVideo = in_array($ext, $allowedVideos, true);
+                        if (!$isImage && !$isVideo) {
+                            $error = 'Midia do carousel invalida. Envie JPG, PNG, WEBP, MP4, WEBM ou OGG.';
+                        } else {
+                            $mime = detect_uploaded_mime_type($tmpName);
+                            $allowedMime = $isVideo ? $allowedVideoMime : $allowedImageMime;
+                            if ($mime !== '' && !in_array($mime, $allowedMime, true)) {
+                                $error = 'Midia do carousel invalida. Envie apenas arquivos suportados.';
+                            } elseif (!is_uploaded_file($tmpName)) {
+                                $error = 'Arquivo de midia do carousel invalido.';
+                            } elseif (!is_writable(UPLOADS_DIR)) {
+                                $error = 'A pasta uploads/ nao tem permissao de escrita.';
+                            } else {
+                                $filename = 'carousel-' . $id . '-' . $carouselId . '-' . time() . '.' . $ext;
+                                $destination = UPLOADS_DIR . DIRECTORY_SEPARATOR . $filename;
+                                if (move_uploaded_file($tmpName, $destination)) {
+                                    $oldCarouselPath = ROOT_PATH . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, (string)$carouselItem['src']);
+                                    if (is_file($oldCarouselPath)) {
+                                        @unlink($oldCarouselPath);
+                                    }
+                                    $carouselItem['src'] = UPLOADS_URL . '/' . $filename;
+                                    $carouselItem['type'] = $isVideo ? 'video' : 'image';
+                                } else {
+                                    $error = 'Falha ao salvar midia do carousel em uploads/.';
+                                }
+                            }
+                        }
+                    }
+                }
+
+                $updatedCarouselById[$carouselId] = $carouselItem;
+            }
+
+            foreach ($carouselById as $existingId => $existingItem) {
+                if (isset($touchedCarousel[$existingId]) || isset($removedCarousel[$existingId])) {
+                    continue;
+                }
+                $updatedCarouselById[$existingId] = $existingItem;
+            }
+
+            $newCarouselIds = isset($_POST['carousel_item_new_ids']) && is_array($_POST['carousel_item_new_ids']) ? $_POST['carousel_item_new_ids'] : [];
+            $newCarouselLinks = isset($_POST['carousel_item_new_links']) && is_array($_POST['carousel_item_new_links']) ? $_POST['carousel_item_new_links'] : [];
+            $newCarouselAlts = isset($_POST['carousel_item_new_alts']) && is_array($_POST['carousel_item_new_alts']) ? $_POST['carousel_item_new_alts'] : [];
+            $newCarouselFiles = isset($_FILES['carousel_item_new_files']) && is_array($_FILES['carousel_item_new_files']) ? $_FILES['carousel_item_new_files'] : null;
+            $newCarouselFilesCount = is_array($newCarouselFiles) && isset($newCarouselFiles['name']) && is_array($newCarouselFiles['name']) ? count($newCarouselFiles['name']) : 0;
+            $newCarouselRowsCount = max(count($newCarouselIds), count($newCarouselLinks), count($newCarouselAlts), $newCarouselFilesCount);
+
+            for ($newIndex = 0; $error === '' && $newIndex < $newCarouselRowsCount; $newIndex++) {
+                $desiredId = (int)($newCarouselIds[$newIndex] ?? 0);
+                if ($desiredId < 1 || $desiredId > $carouselLimit) {
+                    continue;
+                }
+                $newLink = sanitize_text((string)($newCarouselLinks[$newIndex] ?? ''));
+                $newAlt = sanitize_text((string)($newCarouselAlts[$newIndex] ?? ''));
+
+                $newUploadError = UPLOAD_ERR_NO_FILE;
+                if (is_array($newCarouselFiles) && isset($newCarouselFiles['error']) && is_array($newCarouselFiles['error'])) {
+                    $newUploadError = (int)($newCarouselFiles['error'][$newIndex] ?? UPLOAD_ERR_NO_FILE);
+                }
+                $hasNewFile = $newUploadError === UPLOAD_ERR_OK;
+                $hasAnyInput = $hasNewFile || $newLink !== '' || $newAlt !== '';
+                if (!$hasAnyInput) {
+                    continue;
+                }
+
+                if ($newUploadError !== UPLOAD_ERR_OK && $newUploadError !== UPLOAD_ERR_NO_FILE) {
+                    $error = upload_error_message($newUploadError);
+                    break;
+                }
+                if ($newUploadError === UPLOAD_ERR_NO_FILE) {
+                    $error = 'Para adicionar uma nova midia no carousel, envie o arquivo (imagem ou video).';
+                    break;
+                }
+
+                if (isset($updatedCarouselById[$desiredId])) {
+                    $error = 'O slot do slide #' . $desiredId . ' ja esta ocupado. Remova ou troque a midia existente.';
+                    break;
+                }
+
+                $tmpName = is_array($newCarouselFiles) && isset($newCarouselFiles['tmp_name']) && is_array($newCarouselFiles['tmp_name'])
+                    ? (string)($newCarouselFiles['tmp_name'][$newIndex] ?? '')
+                    : '';
+                $original = is_array($newCarouselFiles) && isset($newCarouselFiles['name']) && is_array($newCarouselFiles['name'])
+                    ? (string)($newCarouselFiles['name'][$newIndex] ?? '')
+                    : '';
+                $ext = strtolower(pathinfo($original, PATHINFO_EXTENSION));
+
+                $allowedImages = ['jpg', 'jpeg', 'png', 'webp'];
+                $allowedImageMime = ['image/jpeg', 'image/png', 'image/webp'];
+                $allowedVideos = ['mp4', 'webm', 'ogg'];
+                $allowedVideoMime = ['video/mp4', 'video/webm', 'video/ogg', 'video/x-m4v', 'application/mp4', 'application/octet-stream'];
+
+                $isImage = in_array($ext, $allowedImages, true);
+                $isVideo = in_array($ext, $allowedVideos, true);
+                if (!$isImage && !$isVideo) {
+                    $error = 'Nova midia do carousel invalida. Envie JPG, PNG, WEBP, MP4, WEBM ou OGG.';
+                    break;
+                }
+
+                $mime = detect_uploaded_mime_type($tmpName);
+                $allowedMime = $isVideo ? $allowedVideoMime : $allowedImageMime;
+                if ($mime !== '' && !in_array($mime, $allowedMime, true)) {
+                    $error = 'Nova midia do carousel invalida. Envie apenas arquivos suportados.';
+                    break;
+                }
+                if (!is_uploaded_file($tmpName)) {
+                    $error = 'Arquivo da nova midia do carousel invalido.';
+                    break;
+                }
+                if (!is_writable(UPLOADS_DIR)) {
+                    $error = 'A pasta uploads/ nao tem permissao de escrita.';
+                    break;
+                }
+
+                $filename = 'carousel-' . $id . '-' . $desiredId . '-' . time() . '-' . $newIndex . '.' . $ext;
+                $destination = UPLOADS_DIR . DIRECTORY_SEPARATOR . $filename;
+                if (move_uploaded_file($tmpName, $destination)) {
+                    $updatedCarouselById[$desiredId] = [
+                        'id' => $desiredId,
+                        'type' => $isVideo ? 'video' : 'image',
+                        'src' => UPLOADS_URL . '/' . $filename,
+                        'link' => $newLink,
+                        'alt' => $newAlt,
+                        'order' => $desiredId,
+                    ];
+                } else {
+                    $error = 'Falha ao salvar nova midia do carousel em uploads/.';
+                    break;
+                }
+            }
+
+            ksort($updatedCarouselById);
+            $carouselItemsFinal = [];
+            foreach ($updatedCarouselById as $slotId => $carouselItem) {
+                if (!is_array($carouselItem)) {
+                    continue;
+                }
+                $carouselItemsFinal[] = [
+                    'id' => (int)$slotId,
+                    'type' => (string)($carouselItem['type'] ?? 'image'),
+                    'src' => (string)($carouselItem['src'] ?? ''),
+                    'link' => (string)($carouselItem['link'] ?? ''),
+                    'alt' => (string)($carouselItem['alt'] ?? ''),
+                    'order' => count($carouselItemsFinal) + 1,
+                ];
+            }
+            $data['sections'][$index]['carousel_items'] = $carouselItemsFinal;
 
             $cardsCurrent = $data['sections'][$index]['cards_items'] ?? [];
             if (!is_array($cardsCurrent)) {
@@ -1663,6 +1954,18 @@ $postMaxSize = (string)ini_get('post_max_size');
             <label>Cor de fundo padrao
                 <input type="color" name="background_color" value="#ffffff">
             </label>
+            <label>Fundo dos quadros internos
+                <select name="frame_bg_mode" class="frame-bg-mode">
+                    <option value="default" selected>Padrão (claro)</option>
+                    <option value="section">Acompanhar cor da aba</option>
+                    <option value="custom">Cor personalizada</option>
+                </select>
+                <small class="size-preview">Ajusta o fundo do painel interno e caixas (mapa, formulario, etc).</small>
+            </label>
+            <label data-frame-bg-group="custom">Cor personalizada dos quadros
+                <input type="color" name="frame_bg_color" value="#fffdfa">
+                <small class="size-preview">Usado apenas quando o modo for “Cor personalizada”.</small>
+            </label>
             <label>Animacao desta aba
                 <select name="section_animation">
                     <option value="inherit">Herdar do geral</option>
@@ -1689,6 +1992,7 @@ $postMaxSize = (string)ini_get('post_max_size');
                     <option value="youtube">7. Video do YouTube</option>
                     <option value="map">8. Mapa do Google Maps</option>
                     <option value="contact_form">9. Formulario de contato</option>
+                    <option value="carousel">10. Carousel (2 a 5 midias)</option>
                 </select>
                 <small class="size-preview">Ao escolher a funcao, a caixa de configuracao correspondente aparece abaixo.</small>
             </label>
@@ -1806,17 +2110,32 @@ $postMaxSize = (string)ini_get('post_max_size');
             <div class="full feature-config-group" data-section-function="linked_gallery">
                 <div class="section-config-title">6. Imagens com links</div>
                 <div class="feature-grid">
-                    <label>Quantidade maxima de imagens na galeria desta aba
-                        <input type="number" name="linked_images_limit" min="1" max="30" value="6">
+                    <label>Tipo de galeria
+                        <select name="linked_images_layout" class="linked-gallery-layout">
+                            <option value="mosaic" selected>Mosaico (2 a 6 imagens, tela inteira, botao no hover)</option>
+                            <option value="logos">Logos (2 a 18 imagens, com titulo + descricao)</option>
+                        </select>
                     </label>
-                    <label>Exibicao da galeria de imagens com links
-                        <select name="linked_images_layout">
-                            <option value="boxed" selected>Dentro da caixa de conteudo (padrao)</option>
-                            <option value="direct">Direto na aba (so titulo + imagens)</option>
+                    <label>Quantidade de imagens desta galeria
+                        <input type="number" name="linked_images_limit" min="2" max="18" value="6" class="linked-gallery-limit">
+                    </label>
+                </div>
+                <p class="muted-note">Depois de criar a aba, edite-a para enviar as imagens e links.</p>
+            </div>
+            <div class="full feature-config-group" data-section-function="carousel">
+                <div class="section-config-title">10. Carousel (2 a 5 midias)</div>
+                <div class="feature-grid">
+                    <label>Quantidade de midias no carousel
+                        <input type="number" name="carousel_limit" min="2" max="5" value="2">
+                    </label>
+                    <label>Layout do carousel
+                        <select name="carousel_layout">
+                            <option value="boxed" selected>Centralizado (com titulo e descricao)</option>
+                            <option value="full">Tela cheia (carousel preenche a aba)</option>
                         </select>
                     </label>
                 </div>
-                <p class="muted-note">Depois de criar a aba, edite-a para enviar as imagens da galeria.</p>
+                <p class="muted-note">Depois de criar a aba, edite-a para enviar as midias (imagens ou videos) e links.</p>
             </div>
             <div class="full feature-config-group" data-section-function="youtube">
                 <div class="section-config-title">7. Video do YouTube</div>
@@ -1830,7 +2149,8 @@ $postMaxSize = (string)ini_get('post_max_size');
                 <div class="section-config-title">8. Me localize (Google Maps)</div>
                 <div class="feature-grid">
                     <label>Link de incorporacao do Google Maps
-                        <input type="text" name="map_embed_url" placeholder="https://www.google.com/maps/embed?...">
+                        <input type="text" name="map_embed_url" placeholder="Cole aqui o SRC do iframe do Google Maps (https://www.google.com/maps/embed?...)">
+                        <small class="size-preview">Dica: no Google Maps clique em "Compartilhar" &gt; "Incorporar um mapa" e copie apenas o link do atributo <code>src</code>. Links curtos (maps.app.goo.gl) nao funcionam.</small>
                     </label>
                 </div>
             </div>
@@ -1946,6 +2266,7 @@ $postMaxSize = (string)ini_get('post_max_size');
                             <option value="youtube" <?= $sectionFunctionValue === 'youtube' ? 'selected' : '' ?>>7. Video do YouTube</option>
                             <option value="map" <?= $sectionFunctionValue === 'map' ? 'selected' : '' ?>>8. Mapa do Google Maps</option>
                             <option value="contact_form" <?= $sectionFunctionValue === 'contact_form' ? 'selected' : '' ?>>9. Formulario de contato</option>
+                            <option value="carousel" <?= $sectionFunctionValue === 'carousel' ? 'selected' : '' ?>>10. Carousel (2 a 5 midias)</option>
                         </select>
                         <small class="size-preview">Ao escolher a funcao, a caixa de configuracao correspondente aparece abaixo.</small>
                     </label>
@@ -2030,15 +2351,6 @@ $postMaxSize = (string)ini_get('post_max_size');
                                 </select>
                             </label>
                         </div>
-                        <div class="feature-grid" data-background-media-group="image">
-                            <label>Imagem de fundo (JPG, PNG, WEBP)
-                                <input type="file" name="background_image_<?= (int)$section['id'] ?>" accept=".jpg,.jpeg,.png,.webp">
-                            </label>
-                            <label class="inline-check">
-                                <input type="checkbox" name="remove_image" value="1">
-                                <span>Remover imagem de fundo</span>
-                            </label>
-                        </div>
                         <div class="feature-grid" data-background-media-group="video">
                             <label>Video de fundo da aba (MP4, WEBM, OGG)
                                 <input type="file" name="section_video_bg_<?= (int)$section['id'] ?>" accept=".mp4,.webm,.ogg">
@@ -2048,16 +2360,12 @@ $postMaxSize = (string)ini_get('post_max_size');
                                 <span>Remover video de fundo</span>
                             </label>
                         </div>
-                        <?php if (!empty($section['background_image'])): ?>
-                            <div class="full preview-wrap" data-background-media-group="image">
-                                <img src="../<?= e($section['background_image']) ?>" alt="Imagem de fundo da secao" class="preview">
-                            </div>
-                        <?php endif; ?>
                         <?php if (!empty($section['section_video'])): ?>
                             <div class="full preview-wrap" data-background-media-group="video">
                                 <video controls class="preview" src="../<?= e($section['section_video']) ?>"></video>
                             </div>
                         <?php endif; ?>
+                        <p class="muted-note">A imagem de fundo da aba e configurada no bloco "Fundo da aba" no final deste formulario.</p>
                     </div>
                     <div class="full mode-config-group" data-section-function="basic_text split_media background_media">
                         <div class="section-config-title">Conteudo e estilo do texto</div>
@@ -2117,16 +2425,33 @@ $postMaxSize = (string)ini_get('post_max_size');
                     <div class="full feature-config-group" data-section-function="linked_gallery">
                         <div class="section-config-title">6. Imagens com links</div>
                         <div class="feature-grid">
-                            <label>Quantidade maxima de imagens na galeria desta aba
-                                <input type="number" name="linked_images_limit" min="1" max="30" value="<?= (int)normalize_linked_images_limit($section['linked_images_limit'] ?? 6) ?>">
+                            <?php $linkedLayoutValue = normalize_linked_images_layout($section['linked_images_layout'] ?? 'mosaic'); ?>
+                            <label>Tipo de galeria
+                                <select name="linked_images_layout" class="linked-gallery-layout">
+                                    <option value="mosaic" <?= $linkedLayoutValue === 'mosaic' ? 'selected' : '' ?>>Mosaico (2 a 6 imagens, tela inteira, botao no hover)</option>
+                                    <option value="logos" <?= $linkedLayoutValue === 'logos' ? 'selected' : '' ?>>Logos (2 a 18 imagens, com titulo + descricao)</option>
+                                </select>
                             </label>
-                            <label>Exibicao da galeria de imagens com links
-                                <select name="linked_images_layout">
-                                    <option value="boxed" <?= ($section['linked_images_layout'] ?? 'boxed') === 'boxed' ? 'selected' : '' ?>>Dentro da caixa de conteudo (padrao)</option>
-                                    <option value="direct" <?= ($section['linked_images_layout'] ?? '') === 'direct' ? 'selected' : '' ?>>Direto na aba (so titulo + imagens)</option>
+                            <label>Quantidade de imagens desta galeria
+                                <input type="number" name="linked_images_limit" min="2" max="18" value="<?= (int)normalize_linked_images_limit_for_layout($section['linked_images_limit'] ?? 6, $linkedLayoutValue) ?>" class="linked-gallery-limit">
+                            </label>
+                        </div>
+                    </div>
+                    <div class="full feature-config-group" data-section-function="carousel">
+                        <div class="section-config-title">10. Carousel (2 a 5 midias)</div>
+                        <div class="feature-grid">
+                            <label>Quantidade de midias no carousel
+                                <input type="number" name="carousel_limit" min="2" max="5" value="<?= (int)normalize_carousel_limit($section['carousel_limit'] ?? 2) ?>">
+                            </label>
+                            <?php $carouselLayoutValue = normalize_carousel_layout($section['carousel_layout'] ?? 'boxed'); ?>
+                            <label>Layout do carousel
+                                <select name="carousel_layout">
+                                    <option value="boxed" <?= $carouselLayoutValue === 'boxed' ? 'selected' : '' ?>>Centralizado (com titulo e descricao)</option>
+                                    <option value="full" <?= $carouselLayoutValue === 'full' ? 'selected' : '' ?>>Tela cheia (carousel preenche a aba)</option>
                                 </select>
                             </label>
                         </div>
+                        <p class="muted-note">Depois de salvar, role para baixo em "Gerenciar: Carousel" para enviar as midias.</p>
                     </div>
                     <div class="full feature-config-group" data-section-function="youtube">
                         <div class="section-config-title">7. Video do YouTube</div>
@@ -2140,7 +2465,8 @@ $postMaxSize = (string)ini_get('post_max_size');
                         <div class="section-config-title">8. Me localize (Google Maps)</div>
                         <div class="feature-grid">
                             <label>Link de incorporacao do Google Maps
-                                <input type="text" name="map_embed_url" value="<?= e($section['map_embed_url'] ?? '') ?>" placeholder="https://www.google.com/maps/embed?...">
+                                <input type="text" name="map_embed_url" value="<?= e($section['map_embed_url'] ?? '') ?>" placeholder="Cole aqui o SRC do iframe do Google Maps (https://www.google.com/maps/embed?...)">
+                                <small class="size-preview">Cole o link do <code>src</code> do iframe (maps/embed...). Links curtos (maps.app.goo.gl) nao funcionam.</small>
                             </label>
                         </div>
                     </div>
@@ -2162,76 +2488,195 @@ $postMaxSize = (string)ini_get('post_max_size');
                     <div class="full feature-config-group" data-section-function="linked_gallery">
                         <div class="section-config-title">Gerenciar: Galeria de Imagens com Links</div>
                         <?php
-                        $linkedImages = is_array($section['linked_images'] ?? null) ? $section['linked_images'] : [];
-                        $linkedImagesLimit = normalize_linked_images_limit($section['linked_images_limit'] ?? 6);
-                        $remainingLinkedSlots = max(0, $linkedImagesLimit - count($linkedImages));
-                        ?>
-                        <p class="full muted-note">Imagens atuais: <?= count($linkedImages) ?> de <?= $linkedImagesLimit ?>.</p>
-                        <p class="full muted-note">Limites atuais do servidor: upload_max_filesize=<?= e($uploadMaxFilesize) ?> e post_max_size=<?= e($postMaxSize) ?>.</p>
-                        <?php if (count($linkedImages) === 0): ?>
-                            <p class="full muted-note">Nenhuma imagem vinculada nesta aba ainda.</p>
-                        <?php endif; ?>
-                        <?php foreach ($linkedImages as $linkedImage): ?>
-                            <?php
-                            $linkedImageId = (int)($linkedImage['id'] ?? 0);
-                            if ($linkedImageId <= 0) {
+                        $linkedImagesRaw = is_array($section['linked_images'] ?? null) ? $section['linked_images'] : [];
+                        $linkedImagesLayout = normalize_linked_images_layout($section['linked_images_layout'] ?? 'mosaic');
+                        $linkedImagesLimit = normalize_linked_images_limit_for_layout($section['linked_images_limit'] ?? 6, $linkedImagesLayout);
+                        $linkedImagesBySlot = [];
+                        foreach ($linkedImagesRaw as $linkedImage) {
+                            if (!is_array($linkedImage)) {
                                 continue;
                             }
-                            $linkedImageLink = (string)($linkedImage['link'] ?? '');
-                            $linkedImageAlt = (string)($linkedImage['alt'] ?? '');
-                            $linkedImagePath = (string)($linkedImage['image'] ?? '');
+                            $linkedId = (int)($linkedImage['id'] ?? 0);
+                            if ($linkedId <= 0 || $linkedId > $linkedImagesLimit) {
+                                continue;
+                            }
+                            $linkedImagesBySlot[$linkedId] = $linkedImage;
+                        }
+                        $linkedImagesCount = count($linkedImagesBySlot);
+                        ?>
+                        <p class="full muted-note">Imagens atuais: <?= $linkedImagesCount ?> de <?= $linkedImagesLimit ?>.</p>
+                        <p class="full muted-note">Limites atuais do servidor: upload_max_filesize=<?= e($uploadMaxFilesize) ?> e post_max_size=<?= e($postMaxSize) ?>.</p>
+                        <?php if ($linkedImagesLayout === 'mosaic'): ?>
+                            <p class="full muted-note">Modo mosaico: as imagens ocupam toda a aba. Cada imagem pode ter um link e mostra um botao ao passar o mouse.</p>
+                        <?php else: ?>
+                            <p class="full muted-note">Modo logos: use o titulo e a descricao da aba (campos acima). As imagens viram logos clicaveis (vai direto no link).</p>
+                        <?php endif; ?>
+                        <?php if ($linkedImagesCount === 0): ?>
+                            <p class="full muted-note">Nenhuma imagem vinculada nesta aba ainda.</p>
+                        <?php endif; ?>
+                        <?php for ($linkedSlot = 1; $linkedSlot <= $linkedImagesLimit; $linkedSlot++): ?>
+                            <?php
+                            $linkedItem = $linkedImagesBySlot[$linkedSlot] ?? null;
+                            $linkedImageId = $linkedSlot;
+                            $linkedImageLink = is_array($linkedItem) ? (string)($linkedItem['link'] ?? '') : '';
+                            $linkedImageAlt = is_array($linkedItem) ? (string)($linkedItem['alt'] ?? '') : '';
+                            $linkedImagePath = is_array($linkedItem) ? (string)($linkedItem['image'] ?? '') : '';
+                            $linkedHasImage = is_array($linkedItem) && $linkedImagePath !== '';
                             ?>
-                            <div class="full item-editor">
-                                <div class="item-editor-title">Imagem #<?= $linkedImageId ?></div>
-                                <div class="feature-grid">
-                                    <input type="hidden" name="linked_image_ids[]" value="<?= $linkedImageId ?>">
-                                    <label>Link da imagem #<?= $linkedImageId ?>
-                                        <input type="url" name="linked_image_links[]" value="<?= e($linkedImageLink) ?>" placeholder="https://seusite.com/pagina">
-                                    </label>
-                                    <label>Texto ALT da imagem #<?= $linkedImageId ?>
-                                        <input type="text" name="linked_image_alts[]" value="<?= e($linkedImageAlt) ?>" placeholder="Descricao da imagem">
-                                    </label>
-                                    <label>Trocar arquivo da imagem #<?= $linkedImageId ?> (JPG, PNG, WEBP)
-                                        <input type="file" name="linked_image_files[]" accept=".jpg,.jpeg,.png,.webp">
-                                    </label>
-                                    <label class="inline-check">
-                                        <input type="checkbox" name="linked_image_remove_ids[]" value="<?= $linkedImageId ?>">
-                                        <span>Remover imagem #<?= $linkedImageId ?></span>
-                                    </label>
+                            <div class="full item-editor item-editor-card item-editor-linked" data-collapsible="true">
+                                <div class="item-editor-head">
+                                    <div class="item-editor-title">Imagem <?= $linkedSlot ?></div>
+                                    <button type="button" class="item-toggle" data-label-open="Minimizar" data-label-closed="Expandir" aria-expanded="true">Minimizar</button>
                                 </div>
-                                <?php if ($linkedImagePath !== ''): ?>
-                                    <div class="preview-wrap">
-                                        <?php if ($linkedImageLink !== ''): ?>
-                                            <a href="<?= e($linkedImageLink) ?>" target="_blank" rel="noopener">
-                                                <img src="../<?= e($linkedImagePath) ?>" alt="<?= e($linkedImageAlt !== '' ? $linkedImageAlt : 'Imagem vinculada') ?>" class="preview linked-preview">
-                                            </a>
+                                <div class="item-editor-body">
+                                    <div class="feature-grid">
+                                        <?php if ($linkedHasImage): ?>
+                                            <input type="hidden" name="linked_image_ids[]" value="<?= $linkedImageId ?>">
+                                            <label class="full">Link
+                                                <input type="url" name="linked_image_links[]" value="<?= e($linkedImageLink) ?>" placeholder="https://seusite.com/pagina">
+                                            </label>
+                                            <label class="full">Texto ALT
+                                                <input type="text" name="linked_image_alts[]" value="<?= e($linkedImageAlt) ?>" placeholder="Descricao da imagem">
+                                            </label>
+                                            <label class="full">Trocar imagem (JPG, PNG, WEBP)
+                                                <input type="file" name="linked_image_files[]" accept=".jpg,.jpeg,.png,.webp">
+                                            </label>
+                                            <label class="inline-check full">
+                                                <input type="checkbox" name="linked_image_remove_ids[]" value="<?= $linkedImageId ?>">
+                                                <span>Remover imagem</span>
+                                            </label>
                                         <?php else: ?>
-                                            <img src="../<?= e($linkedImagePath) ?>" alt="<?= e($linkedImageAlt !== '' ? $linkedImageAlt : 'Imagem vinculada') ?>" class="preview linked-preview">
+                                            <input type="hidden" name="linked_image_new_ids[]" value="<?= $linkedSlot ?>">
+                                            <label class="full">Nova imagem (JPG, PNG, WEBP)
+                                                <input type="file" name="linked_image_new_files[]" accept=".jpg,.jpeg,.png,.webp">
+                                            </label>
+                                            <label class="full">Link (opcional)
+                                                <input type="url" name="linked_image_new_links[]" placeholder="https://seusite.com/pagina">
+                                            </label>
+                                            <label class="full">Texto ALT (opcional)
+                                                <input type="text" name="linked_image_new_alts[]" placeholder="Descricao da imagem">
+                                            </label>
                                         <?php endif; ?>
                                     </div>
-                                <?php endif; ?>
+                                    <?php if ($linkedHasImage): ?>
+                                        <div class="preview-wrap">
+                                            <?php if ($linkedImageLink !== ''): ?>
+                                                <a href="<?= e($linkedImageLink) ?>" target="_blank" rel="noopener">
+                                                    <img src="../<?= e($linkedImagePath) ?>" alt="<?= e($linkedImageAlt !== '' ? $linkedImageAlt : 'Imagem vinculada') ?>" class="preview linked-preview">
+                                                </a>
+                                            <?php else: ?>
+                                                <img src="../<?= e($linkedImagePath) ?>" alt="<?= e($linkedImageAlt !== '' ? $linkedImageAlt : 'Imagem vinculada') ?>" class="preview linked-preview">
+                                            <?php endif; ?>
+                                        </div>
+                                    <?php endif; ?>
+                                </div>
                             </div>
-                        <?php endforeach; ?>
-                        <?php if ($remainingLinkedSlots > 0): ?>
-                            <div class="full item-editor">
-                                <div class="item-editor-title">Novas imagens (preencha ate <?= $remainingLinkedSlots ?>)</div>
-                                <?php for ($newLinkedSlot = 1; $newLinkedSlot <= $remainingLinkedSlots; $newLinkedSlot++): ?>
-                                    <div class="feature-grid">
-                                        <label>Nova imagem #<?= $newLinkedSlot ?> (JPG, PNG, WEBP)
-                                            <input type="file" name="linked_image_new_files[]" accept=".jpg,.jpeg,.png,.webp">
-                                        </label>
-                                        <label>Link da nova imagem #<?= $newLinkedSlot ?>
-                                            <input type="url" name="linked_image_new_links[]" placeholder="https://seusite.com/pagina">
-                                        </label>
-                                        <label class="full">Texto ALT da nova imagem #<?= $newLinkedSlot ?>
-                                            <input type="text" name="linked_image_new_alts[]" placeholder="Descricao da imagem">
-                                        </label>
-                                    </div>
-                                <?php endfor; ?>
-                            </div>
-                        <?php else: ?>
-                            <p class="full muted-note">Limite da galeria atingido para esta aba. Aumente a quantidade maxima ou remova uma imagem.</p>
+                        <?php endfor; ?>
+                    </div>
+                    <div class="full feature-config-group" data-section-function="carousel">
+                        <div class="section-config-title">Gerenciar: Carousel</div>
+                        <?php
+                        $carouselLimit = normalize_carousel_limit($section['carousel_limit'] ?? 2);
+                        $carouselLayoutValue = normalize_carousel_layout($section['carousel_layout'] ?? 'boxed');
+                        $carouselRaw = is_array($section['carousel_items'] ?? null) ? $section['carousel_items'] : [];
+                        $carouselBySlot = [];
+                        foreach ($carouselRaw as $carouselItem) {
+                            if (!is_array($carouselItem)) {
+                                continue;
+                            }
+                            $carouselId = (int)($carouselItem['id'] ?? 0);
+                            if ($carouselId < 1 || $carouselId > 5) {
+                                continue;
+                            }
+                            $carouselSrc = trim((string)($carouselItem['src'] ?? ''));
+                            if ($carouselSrc === '') {
+                                continue;
+                            }
+                            $carouselType = trim((string)($carouselItem['type'] ?? ''));
+                            if (!in_array($carouselType, ['image', 'video'], true)) {
+                                $ext = strtolower(pathinfo($carouselSrc, PATHINFO_EXTENSION));
+                                $carouselType = in_array($ext, ['mp4', 'webm', 'ogg'], true) ? 'video' : 'image';
+                            }
+                            $carouselBySlot[$carouselId] = [
+                                'id' => $carouselId,
+                                'type' => $carouselType,
+                                'src' => $carouselSrc,
+                                'link' => (string)($carouselItem['link'] ?? ''),
+                                'alt' => (string)($carouselItem['alt'] ?? ''),
+                            ];
+                        }
+                        $carouselCount = count($carouselBySlot);
+                        ?>
+                        <p class="full muted-note">Midias atuais: <?= $carouselCount ?> de <?= $carouselLimit ?> (maximo 5).</p>
+                        <p class="full muted-note">Limites atuais do servidor: upload_max_filesize=<?= e($uploadMaxFilesize) ?> e post_max_size=<?= e($postMaxSize) ?>.</p>
+                        <?php if ($carouselLayoutValue === 'full'): ?>
+                            <p class="full muted-note">Modo tela cheia: o carousel preenche toda a aba no site. Para mostrar titulo e descricao acima, use o modo "Centralizado".</p>
                         <?php endif; ?>
+                        <?php if ($carouselCount < 2): ?>
+                            <p class="full muted-note">Dica: o carousel so aparece no site quando tiver pelo menos 2 midias enviadas.</p>
+                        <?php endif; ?>
+                        <?php for ($carouselSlot = 1; $carouselSlot <= $carouselLimit; $carouselSlot++): ?>
+                            <?php
+                            $carouselItem = $carouselBySlot[$carouselSlot] ?? null;
+                            $carouselHasMedia = is_array($carouselItem) && trim((string)($carouselItem['src'] ?? '')) !== '';
+                            $carouselSrc = $carouselHasMedia ? (string)($carouselItem['src'] ?? '') : '';
+                            $carouselLink = $carouselHasMedia ? (string)($carouselItem['link'] ?? '') : '';
+                            $carouselAlt = $carouselHasMedia ? (string)($carouselItem['alt'] ?? '') : '';
+                            $carouselType = $carouselHasMedia ? (string)($carouselItem['type'] ?? 'image') : 'image';
+                            ?>
+                            <div class="full item-editor item-editor-card item-editor-carousel" data-collapsible="true">
+                                <div class="item-editor-head">
+                                    <div class="item-editor-title">Slide <?= $carouselSlot ?><?= $carouselHasMedia && $carouselType === 'video' ? ' (Video)' : '' ?></div>
+                                    <button type="button" class="item-toggle" data-label-open="Minimizar" data-label-closed="Expandir" aria-expanded="true">Minimizar</button>
+                                </div>
+                                <div class="item-editor-body">
+                                    <div class="feature-grid">
+                                        <?php if ($carouselHasMedia): ?>
+                                            <input type="hidden" name="carousel_item_ids[]" value="<?= $carouselSlot ?>">
+                                            <label class="full">Link (opcional)
+                                                <input type="url" name="carousel_item_links[]" value="<?= e($carouselLink) ?>" placeholder="https://seusite.com/pagina">
+                                            </label>
+                                            <label class="full">Texto ALT (opcional)
+                                                <input type="text" name="carousel_item_alts[]" value="<?= e($carouselAlt) ?>" placeholder="Descricao da midia">
+                                            </label>
+                                            <label class="full">Trocar midia (imagem ou video)
+                                                <input type="file" name="carousel_item_files[]" accept=".jpg,.jpeg,.png,.webp,.mp4,.webm,.ogg">
+                                            </label>
+                                            <label class="inline-check full">
+                                                <input type="checkbox" name="carousel_item_remove_ids[]" value="<?= $carouselSlot ?>">
+                                                <span>Remover slide</span>
+                                            </label>
+                                        <?php else: ?>
+                                            <input type="hidden" name="carousel_item_new_ids[]" value="<?= $carouselSlot ?>">
+                                            <label class="full">Nova midia (imagem ou video)
+                                                <input type="file" name="carousel_item_new_files[]" accept=".jpg,.jpeg,.png,.webp,.mp4,.webm,.ogg">
+                                            </label>
+                                            <label class="full">Link (opcional)
+                                                <input type="url" name="carousel_item_new_links[]" placeholder="https://seusite.com/pagina">
+                                            </label>
+                                            <label class="full">Texto ALT (opcional)
+                                                <input type="text" name="carousel_item_new_alts[]" placeholder="Descricao da midia">
+                                            </label>
+                                        <?php endif; ?>
+                                    </div>
+                                    <?php if ($carouselHasMedia): ?>
+                                        <div class="preview-wrap">
+                                            <?php if ($carouselType === 'video'): ?>
+                                                <video src="../<?= e($carouselSrc) ?>" class="preview linked-preview" muted loop playsinline controls preload="metadata"></video>
+                                            <?php else: ?>
+                                                <?php if ($carouselLink !== ''): ?>
+                                                    <a href="<?= e($carouselLink) ?>" target="_blank" rel="noopener">
+                                                        <img src="../<?= e($carouselSrc) ?>" alt="<?= e($carouselAlt !== '' ? $carouselAlt : 'Midia do carousel') ?>" class="preview linked-preview" loading="lazy">
+                                                    </a>
+                                                <?php else: ?>
+                                                    <img src="../<?= e($carouselSrc) ?>" alt="<?= e($carouselAlt !== '' ? $carouselAlt : 'Midia do carousel') ?>" class="preview linked-preview" loading="lazy">
+                                                <?php endif; ?>
+                                            <?php endif; ?>
+                                        </div>
+                                    <?php endif; ?>
+                                </div>
+                            </div>
+                        <?php endfor; ?>
                     </div>
                     <div class="full feature-config-group" data-section-function="cards_media cards_text">
                         <div class="section-config-title">Gerenciar: Cards</div>
@@ -2337,6 +2782,31 @@ $postMaxSize = (string)ini_get('post_max_size');
                     <label>Cor de fundo da aba
                         <input type="color" name="background_color" value="<?= e($section['background_color'] ?? '#ffffff') ?>">
                     </label>
+                    <?php $frameBgModeValue = normalize_frame_bg_mode($section['frame_bg_mode'] ?? 'default'); ?>
+                    <label>Fundo dos quadros internos
+                        <select name="frame_bg_mode" class="frame-bg-mode">
+                            <option value="default" <?= $frameBgModeValue === 'default' ? 'selected' : '' ?>>Padrão (claro)</option>
+                            <option value="section" <?= $frameBgModeValue === 'section' ? 'selected' : '' ?>>Acompanhar cor da aba</option>
+                            <option value="custom" <?= $frameBgModeValue === 'custom' ? 'selected' : '' ?>>Cor personalizada</option>
+                        </select>
+                        <small class="size-preview">Controla o fundo do painel interno, caixas de mapa, formulario, etc.</small>
+                    </label>
+                    <label data-frame-bg-group="custom">Cor personalizada dos quadros
+                        <input type="color" name="frame_bg_color" value="<?= e(normalize_hex_color($section['frame_bg_color'] ?? '#fffdfa', '#fffdfa')) ?>">
+                        <small class="size-preview">Usado apenas quando o modo for “Cor personalizada”.</small>
+                    </label>
+                    <label class="full">Imagem de fundo da aba (opcional, JPG, PNG, WEBP)
+                        <input type="file" name="background_image_<?= (int)$section['id'] ?>" accept=".jpg,.jpeg,.png,.webp">
+                    </label>
+                    <label class="inline-check full">
+                        <input type="checkbox" name="remove_image" value="1">
+                        <span>Remover imagem de fundo</span>
+                    </label>
+                    <?php if (!empty($section['background_image'])): ?>
+                        <div class="full preview-wrap">
+                            <img src="../<?= e($section['background_image']) ?>" alt="Imagem de fundo da secao" class="preview">
+                        </div>
+                    <?php endif; ?>
                     <div class="full">
                         <button type="submit">Salvar aba</button>
                     </div>
